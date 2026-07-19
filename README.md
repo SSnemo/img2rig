@@ -3,6 +3,10 @@
 **Turn a single AI-generated illustration into a breathing, layered character
 rig — fully agent-driven.**
 
+[![PyPI](https://img.shields.io/pypi/v/img2rig)](https://pypi.org/project/img2rig/)
+[![npm](https://img.shields.io/npm/v/img2rig)](https://www.npmjs.com/package/img2rig)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 <p align="center">
   <img src="docs/media/preview_idle.gif" alt="idle: breathing, blinking, hair on springs" height="380">
   <img src="docs/media/preview_showcase.gif" alt="showcase: hit, stagger, enrage" height="380">
@@ -53,7 +57,7 @@ distributed here, and the pipeline is checkpoint-agnostic (tag-trained anime
 checkpoints respond best to the example prompt templates).
 
 ```bash
-pip install -e .[psd]
+pip install img2rig[psd]                 # or: pip install -e .[psd] from a checkout
 cp examples/character.yaml mychar.yaml   # edit prompts; point tables come later
 img2rig gen --spec mychar.yaml           # roll candidates + contact sheet
 # ... follow the stage flow in docs/pipeline.md, or hand the wheel to an
