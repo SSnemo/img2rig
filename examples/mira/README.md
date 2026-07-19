@@ -31,3 +31,11 @@ Notes from her production run (also folded into the agent playbook):
 - A cloned "neck pad" was added to the z1 underlay so head sway reveals
   painted collar instead of background — the cheap version of occlusion
   backfill, good enough below ~0.1 rad of head travel.
+- Layer tearing under big motion (stagger-scale leans) was eliminated by
+  the assemble stage's `overlap_px: 18` expansion; her rest-pose composite
+  is pixel-identical with or without it (flatten diff 0.65% both ways).
+- `rig/kf_windup.png` / `rig/kf_swing.png` are her full-frame strike
+  keyframes (booru-tag weighted img2img over the base, matted by SAM +
+  identity-diff union + dark-costume keying — the near-black cape survives
+  none of the three alone). The C++ runtime swaps them in during
+  `strikeWindup`/`strikeRelease`; the Python preview doesn't use them.

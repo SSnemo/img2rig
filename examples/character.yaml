@@ -124,6 +124,9 @@ cleanup:
     head_zone_y: 1080              # 4K: character pixels above this & unassigned -> head_base
     close_r: 2                     # morphological close radius (bigger swallows neighbors)
     remainder_min_blob: 3000
+    overlap_px: 14                 # anti-tearing: lower-z layers clone source pixels
+                                   # this far under higher-z neighbors, so motion
+                                   # reveals costume instead of background gaps
 
 # Runtime rig tree. Pivots in source-4K coordinates; export rescales to canvas.
 # parent chain is at most root -> body_pivot -> head_pivot (two virtual levels).

@@ -222,6 +222,46 @@ def keyframe(spec: Spec, client: Client, frame_name: str,
         if stats2[i, cv2.CC_STAT_AREA] < 0.003 * total:
             keep[lab2 == i] = 1
 
+    # Identity-diff composite: a route-B (masked inpaint) keyframe is
+    # pixel-identical to the base outside the repainted region, and the base
+    # figure already has a *proven* matte from the layer-pack build. So trust
+    # SAM only where pixels actually changed (the new pose), and reuse the
+    # validated character matte everywhere else - this is what keeps
+    # near-black capes and other SAM-hostile costume pieces intact.
+    char_path = os.path.join(spec.work_dir, "masks", "mask_character.png")
+    if os.path.exists(char_path):
+        char = np.array(Image.open(char_path).convert("L").resize((W, H))) > 127
+        changed = cv2.dilate(diff, np.ones((31, 31), np.uint8)).astype(bool)
+        # union, never subtraction: SAM's matte plus every proven-character
+        # pixel that provably didn't change. Repainted-but-similar regions
+        # (inpaint recreating the same costume) stay whatever SAM said.
+        #
+        # One trap in the union: where the base had dark costume and the
+        # repaint put similar-valued *background* (cape moved away), the
+        # pixel diff is small and the union would matte background in. The
+        # frame's outer margins are guaranteed background, so build a
+        # row-wise background color model and drop union additions that
+        # match their row's background.
+        im_arr = np.asarray(im, np.int16)
+        margin = np.concatenate([im_arr[:, :90], im_arr[:, -90:]], axis=1)
+        bg_row = np.median(margin, axis=1)
+        bg_like = np.abs(im_arr - bg_row[:, None, :]).sum(2) < 60
+        added = char & ~changed & ~keep.astype(bool) & ~bg_like
+        keep = (keep.astype(bool) | added).astype(np.uint8)
+        # Dark-costume key: SAM reliably refuses near-black costume (capes)
+        # against a soft gradient, and a repositioned cape extends beyond the
+        # base silhouette so the identity union can't rescue it either. On a
+        # light background, near-black pixels adjacent to the figure can only
+        # be costume - key them in directly.
+        if bg_row.sum(axis=1).mean() > 300:  # only for clearly light backdrops
+            dark = im_arr.sum(2) < 270
+            near = cv2.dilate(keep, cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (181, 181))).astype(bool)
+            keep = (keep.astype(bool) | (dark & near)).astype(np.uint8)
+        keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+        print(f"identity-diff union: changed {changed.mean():.1%}, "
+              f"matte {keep.mean():.3f}")
+
     # soft edge, then color bleed: a keyframe is one flat image, so TELEA
     # from the silhouette outward is enough (the layer pack uses the
     # iterative bleed instead)

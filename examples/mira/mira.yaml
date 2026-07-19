@@ -446,6 +446,7 @@ cleanup:
     head_zone_y: 520
     close_r: 2
     remainder_min_blob: 400
+    overlap_px: 18
 rig:
   canvas:
   - 1232

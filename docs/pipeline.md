@@ -86,6 +86,12 @@ loop. Key algorithms:
 - Assembly is mutual-exclusion by priority (mask-confidence order, first
   grab wins), with a small morphological close (a big radius swallows
   neighboring parts) and connected-component filtering on the remainder.
+- **Overlap expansion** (`assemble.overlap_px`) is the anti-tearing pass:
+  after exclusion, each lower-z layer clones source pixels a few px into
+  its higher-z neighbors' territory. The clone is invisible at rest (the
+  upper layer covers it) and is exactly what motion reveals instead of a
+  background-colored gap. The flatten-diff QA proves the rest pose is
+  pixel-identical either way.
 
 **[5] Export.**
 - 2 px alpha feather (premultiplied pipelines turn dirty edges into dark

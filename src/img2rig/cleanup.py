@@ -504,6 +504,33 @@ def assemble(spec: Spec, base4k_path: str, variant4k_path: str | None = None,
                 rem2 |= lr == i
     excl["body_remainder"] = rem2
 
+    # Overlap expansion - the anti-tearing pass. Mutual exclusion gives every
+    # pixel exactly one owner, so any relative layer motion opens a gap that
+    # shows the background. Fix: each layer additionally clones source pixels
+    # a few px into territory owned by HIGHER-z layers. At rest the clone is
+    # hidden under the upper layer (composite is pixel-identical); in motion
+    # the gap reveals painted costume instead of a hole. Lower extends under
+    # upper only, so top silhouettes stay crisp. Small facial parts are
+    # skipped - their backing is head_base's job (eye pad / hair rim).
+    overlap = cfg.get("overlap_px", 14)
+    if overlap > 0:
+        rig_layers = spec.get("rig", {}).get("layers", {})
+        z_of = {n: rig_layers[n].get("z", 0) for n in excl if n in rig_layers}
+        facial = {"eye_L", "eye_R", "brow_L", "brow_R", "mouth"}
+        k = _kernel(2 * overlap + 1)
+        ext: dict[str, np.ndarray] = {}
+        for n, z in z_of.items():
+            if n in facial or not excl[n].any():
+                continue
+            higher = np.zeros((H, W), bool)
+            for m, mz in z_of.items():
+                if mz > z:
+                    higher |= excl[m]
+            grow = cv2.dilate(excl[n].astype(np.uint8), k).astype(bool)
+            ext[n] = excl[n] | (grow & higher & dom)
+        for n, m in ext.items():
+            excl[n] = m
+
     for n, m in excl.items():
         save_mask(spec, f"final_{n}", m)
     save_mask(spec, "final_character", dom)
