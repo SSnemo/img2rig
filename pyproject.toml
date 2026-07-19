@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "img2rig"
+version = "0.1.0"
+description = "Turn a single AI-generated illustration into a breathing, layered character rig - an agent-driven pipeline from Stable Diffusion to a lightweight runtime."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.28",
+    "pillow>=10.0",
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+psd = ["pytoshop>=1.2"]
+
+[project.scripts]
+img2rig = "img2rig.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

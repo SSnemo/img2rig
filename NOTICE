@@ -1,0 +1,12 @@
+img2rig
+Copyright 2026 img2rig contributors
+
+Licensed under the Apache License, Version 2.0.
+
+This product interacts with (but does not include or redistribute):
+- AUTOMATIC1111 Stable Diffusion WebUI (AGPL-3.0) - via its local HTTP API
+- sd-webui-segment-anything (Apache-2.0) - via its local HTTP API
+- Segment Anything (SAM) and GroundingDINO model weights - user-supplied
+
+"Live2D" is a trademark of Live2D Inc. This project is not affiliated with
+Live2D Inc. and contains no Live2D SDK code.

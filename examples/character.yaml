@@ -1,0 +1,150 @@
+# img2rig character spec.
+# One file describes everything the pipeline needs for one character:
+# prompts, SD parameters, segmentation part tables, SAM point tables
+# (iterated by an agent's visual loop), and the runtime rig tree.
+# Coordinates: `hires` space = the hires-fix output the pipeline works in
+# (base_size x hires.scale). Fractions of width/height where noted.
+
+name: mira                # asset prefix and output directory name
+work_dir: work/mira       # all intermediates (candidates, masks, previews) go here
+out_dir: out/mira         # final layer pack + rig.txt
+
+sd:
+  api: "http://127.0.0.1:7860"      # AUTOMATIC1111-compatible WebUI with API enabled
+  checkpoint: null                  # optional: force a checkpoint via override_settings
+  sampler: "DPM++ 2M Karras"
+  steps: 30
+  cfg: 7
+  base_size: [832, 1216]            # SD1.5-family sweet spot for a standing figure
+  hires:
+    scale: 2.0
+    upscaler: "R-ESRGAN 4x+ Anime6B"
+    denoise: 0.4
+    steps: 20
+  sam_model: "sam_vit_h_4b8939.pth"                 # sd-webui-segment-anything
+  dino_model: "GroundingDINO_SwinT_OGC (694MB)"     # name must include the size suffix
+
+prompt:
+  quality: "(masterpiece, best quality:1.2), highly detailed"
+  # The subject line is the character. Everything layering-critical lives in
+  # `pose_constraints` - see docs/pipeline.md for why each tag is load-bearing.
+  subject: "1girl, solo, young knight, short silver hair, blue and gold ornate armor, ornate cape"
+  style: "dramatic rim light, dark fantasy"
+  pose_constraints: "full body, standing, looking at viewer, arms away from body, simple background, dark background"
+  negative: "(worst quality, low quality:1.3), text, watermark, signature, card frame, ornate border, hands clasped, crossed arms, weapon in front of body, extra limbs, extra hands, multiple views, nsfw"
+
+gen:
+  candidates: 12            # per selection batch; expect a low hit rate, roll wide
+  seed0: 1000000
+  contact_tile: [300, 439]  # thumbnail size on the contact sheet
+
+# State variants: same composition, different look. img2img on the final
+# picked image; denoise ~0.55 keeps identity while landing the new elements.
+variants:
+  rage:
+    denoise: 0.55
+    cfg: 8
+    add: "glowing red eyes, burning aura, glowing magic sigil, enraged"
+
+# Pose keyframes: full-frame replacement frames (windup / swing).
+# Route A = whole-image img2img; route B = upper-body inpaint with the face
+# cut out of the mask (identity lock) and headroom above for new arms.
+keyframes:
+  identity: "1girl, solo, young knight, short silver hair, blue and gold ornate armor, ornate cape"
+  frames:
+    windup:
+      add: "(both arms raised high overhead:1.4), (clenched fists above head:1.3), preparing a mighty overhead strike, fierce expression, battle stance"
+      neg_add: "arms at sides, arms down, hands at hips, hands clasped"
+    swing:
+      add: "(leaning forward:1.2), (both arms swung downward:1.4), (powerful downward smash follow-through:1.3), attack motion, dynamic pose"
+      neg_add: "arms raised, arms overhead, standing straight"
+  mask:                       # fractions of hires W/H
+    band: [0.02, 0.58]        # top .. bottom of the editable band
+    face_hole: { center: [0.549, 0.19], radius: [0.15, 0.13] }
+  denoise: { img2img: [0.60, 0.70], inpaint: [0.70, 0.80] }
+
+# Step [2] first-pass layering: DINO text prompt -> SAM mask.
+# Area window = fraction of frame; defends against DINO boxing the whole
+# figure for clothing/small-part words. pick: large | mid | small.
+split:
+  parts:
+    - { name: character, prompts: [girl],            thr: 0.30, min: 0.30,    max: 0.75,   pick: large }
+    - { name: hair,      prompts: [hair],            thr: 0.30, min: 0.005,   max: 0.08,   pick: large }
+    - { name: face,      prompts: [face],            thr: 0.30, min: 0.003,   max: 0.03,   pick: mid }
+    - { name: eyes,      prompts: [eyes],            thr: 0.25, min: 0.00005, max: 0.002,  pick: small }
+    - { name: brows,     prompts: [eyebrows],        thr: 0.20, min: 0.00005, max: 0.0015, pick: small }
+    - { name: mouth,     prompts: [mouth, lips],     thr: 0.20, min: 0.00005, max: 0.004,  pick: small }
+    - { name: cape,      prompts: [cape, cloak],     thr: 0.28, min: 0.03,    max: 0.28,   pick: large }
+    - { name: arms,      prompts: [arm, sleeve],     thr: 0.28, min: 0.01,    max: 0.15,   pick: mid }
+    - { name: legs,      prompts: [legs],            thr: 0.30, min: 0.05,    max: 0.25,   pick: large }
+    - { name: armor,     prompts: [breastplate],     thr: 0.28, min: 0.03,    max: 0.30,   pick: mid }
+
+# Step [3] refinement. Point tables are in hires coordinates and are meant to
+# be iterated by an agent looking at the probe/overlay images - see
+# docs/agent-playbook.md. Values below are placeholders to overwrite per character.
+cleanup:
+  face_crop: [615, 80, 1215, 680]         # face work area, hires coords
+  eyes_band: { box: [170, 185, 430, 305], scale: 3 }   # 2nd-level crop inside face_crop
+  face_parts:            # SAM point prompts in face-crop coords (eyes/brows via eyes_band)
+    brow_L: { pos: [[232, 217], [245, 219]], neg: [[240, 250], [232, 200], [300, 290]], amax: 0.05, band: true }
+    brow_R: { pos: [[358, 220], [370, 222]], neg: [[360, 250], [358, 203], [300, 290]], amax: 0.05, band: true }
+    eye_L:  { pos: [[240, 250], [248, 251]], neg: [[238, 228], [240, 270], [300, 290]], amax: 0.06, band: true }
+    eye_R:  { pos: [[360, 250], [352, 251]], neg: [[358, 231], [360, 272], [300, 290]], amax: 0.06, band: true }
+    mouth:  { pos: [[290, 330]], neg: [[290, 300], [290, 365], [240, 330], [345, 330]], amax: 0.012, band: false }
+  body_parts:            # SAM point prompts in hires coords: name -> pos/neg/area window
+    character: { pos: [[858, 330], [858, 750], [858, 1400], [790, 1900], [900, 1900]],
+                 neg: [[300, 800], [1400, 800], [400, 300], [1300, 300]], amin: 0.18, amax: 0.45 }
+    hair:      { pos: [[900, 250], [790, 430], [1075, 420]],
+                 neg: [[905, 380], [858, 120], [640, 600], [1080, 600]], amin: 0.004, amax: 0.04 }
+    cape:      { pos: [[560, 1500], [1180, 1400], [500, 1100]],
+                 neg: [[858, 900], [858, 1900], [300, 800], [1400, 800]], amin: 0.06, amax: 0.25 }
+    arm_L:     { pos: [[660, 1000], [649, 1100], [640, 1200], [628, 1290]],
+                 neg: [[500, 1100], [760, 900], [858, 900]], amin: 0.004, amax: 0.04 }
+    arm_R:     { pos: [[1055, 1000], [1068, 1100], [1080, 1200], [1092, 1290]],
+                 neg: [[1165, 1100], [955, 900], [858, 900]], amin: 0.004, amax: 0.04 }
+    legs:      { pos: [[782, 1950], [910, 1750], [830, 2380]],
+                 neg: [[848, 1550], [560, 1800], [1180, 1800]], amin: 0.02, amax: 0.12 }
+    armor:     { pos: [[858, 700], [858, 820], [858, 1120]],
+                 neg: [[858, 500], [858, 1450], [500, 1100]], amin: 0.02, amax: 0.15 }
+  hair_split: { eyeline_y: 340, cheek_x: [795, 1040], min_blob: 800 }  # geometric front/back split
+  glow:                  # derive an emissive layer from base-vs-variant pixel diff
+    variant: rage
+    roi: [eye_L, eye_R]            # masks whose dilated union bounds the search
+    roi_dilate: 61
+    red_gain: 50                   # variant.R - base.R threshold inside roi
+    any_diff: 100                  # full-color-diff fallback inside tight eye roi
+    min_blob: 300
+  inpaint:               # occlusion fill for the layer below (hair rim -> skin)
+    rim_px: 12
+    skin_sample: [1710, 780]       # 4K coords: mid-tone cheek patch to flat-fill from
+    eye_pad_dilate: 13
+  assemble:
+    order: [brow_L, brow_R, eye_L, eye_R, mouth, hair_front, hair_back,
+            arm_L, arm_R, armor, legs, cape]   # mutual exclusion: first grab wins
+    head_zone_y: 1080              # 4K: character pixels above this & unassigned -> head_base
+    close_r: 2                     # morphological close radius (bigger swallows neighbors)
+    remainder_min_blob: 3000
+
+# Runtime rig tree. Pivots in source-4K coordinates; export rescales to canvas.
+# parent chain is at most root -> body_pivot -> head_pivot (two virtual levels).
+rig:
+  canvas: [1232, 1800]
+  nodes:
+    body_pivot: { parent: root,       pivot: [1716, 3000] }
+    head_pivot: { parent: body_pivot, pivot: [1830, 1040] }   # neck root
+  layers:
+    cape:           { parent: body_pivot, z: 0,  pivot: [1716, 1130], spring: [28.0, 5.5] }
+    body_remainder: { parent: body_pivot, z: 1 }
+    legs:           { parent: body_pivot, z: 2 }
+    arm_L:          { parent: body_pivot, z: 4,  pivot: [1260, 1130] }   # shoulder
+    arm_R:          { parent: body_pivot, z: 5,  pivot: [2180, 1140] }
+    armor:          { parent: body_pivot, z: 6,  pivot: [1716, 1600] }
+    hair_back:      { parent: head_pivot, z: 7,  pivot: [1830, 500], spring: [46.0, 6.5] }
+    head_base:      { parent: head_pivot, z: 8,  pivot: [1830, 1040] }
+    mouth:          { parent: head_pivot, z: 9 }
+    eye_L:          { parent: head_pivot, z: 10 }
+    eye_R:          { parent: head_pivot, z: 11 }
+    brow_L:         { parent: head_pivot, z: 12 }
+    brow_R:         { parent: head_pivot, z: 13 }
+    hair_front:     { parent: head_pivot, z: 14, pivot: [1830, 460], spring: [60.0, 8.0] }
+    sigil:          { parent: head_pivot, z: 16, pivot: [1830, 400] }

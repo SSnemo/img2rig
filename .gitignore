@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+runtime/cpp/build/
+# pipeline work products (candidates, masks, PSDs) live outside the repo
+work/
+*.psd
+*.tmp
+.~lock*
