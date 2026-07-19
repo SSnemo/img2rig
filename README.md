@@ -9,7 +9,8 @@ rig — fully agent-driven.**
   <br>
   <em>Mira, the bundled demo character: one txt2img illustration → 13 layers → idle / hit / stagger / enrage,
   all procedural. Try it without installing anything GPU-side:
-  <code>img2rig preview --spec examples/mira/mira.yaml</code></em>
+  <code>img2rig preview --spec examples/mira/mira.yaml</code>, or interactively in the browser via
+  <code>runtime/web/</code></em>
 </p>
 
 One text prompt in; out comes a character that breathes, blinks, sways her
@@ -81,6 +82,7 @@ Runtime tests: `cmake -S runtime/cpp -B build && cmake --build build && ctest`.
 | `examples/character.yaml` | the spec schema — prompts, part tables, SAM point tables, rig tree |
 | `examples/mira/` | complete demo character: iterated spec + exported 13-layer rig pack (CC0), renders offline via `img2rig preview` |
 | `runtime/cpp/img2rig/` | `rig_math.h` (parse/springs/solve, unit-tested) + `rig_player.h` (motion state machine, renderer-agnostic) |
+| `runtime/web/` | dependency-free canvas player (ES module) — `python -m http.server` at the repo root, open `/runtime/web/`, click the motion buttons |
 | `docs/` | [pipeline](docs/pipeline.md) · [rig format](docs/rig-format.md) · [agent playbook](docs/agent-playbook.md) |
 | `skill/img2rig-pipeline/` | drop-in skill for Claude Code agents operating the pipeline |
 

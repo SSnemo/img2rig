@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>img2rig web player</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; gap: 16px;
+         background: #16161f; color: #cfcfda;
+         font: 14px/1.5 system-ui, sans-serif; }
+  canvas { background: radial-gradient(ellipse at 50% 30%, #23233a, #101018);
+           border-radius: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button { background: #2a2a3d; color: #e8e8f2; border: 1px solid #3d3d55;
+           border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button:hover { background: #3a3a55; }
+  #err { color: #ff7a7a; max-width: 560px; text-align: center; }
+</style>
+</head>
+<body>
+<h2>img2rig — web reference player</h2>
+<canvas id="cv" width="480" height="640"></canvas>
+<div class="row" id="buttons"></div>
+<div id="err"></div>
+<script type="module">
+import { RigPlayer } from "./rig-player.js";
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const params = new URLSearchParams(location.search);
+const rigUrl = params.get("rig") ?? "../../examples/mira/rig/rig.txt";
+
+const MOTIONS = ["hit", "lunge", "stagger", "windup", "collapse", "recover",
+                 "enrage", "calm", "heal", "die"];
+
+try {
+  const rig = await RigPlayer.load(rigUrl);
+  const row = document.getElementById("buttons");
+  for (const m of MOTIONS) {
+    const b = document.createElement("button");
+    b.textContent = m;
+    b.onclick = () => rig.trigger(m);
+    row.appendChild(b);
+  }
+  const reset = document.createElement("button");
+  reset.textContent = "reset";
+  reset.onclick = () => rig.reset();
+  row.appendChild(reset);
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = (now - last) / 1000; last = now;
+    rig.update(dt);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    rig.draw(ctx, cv.width / 2, cv.height / 2, 600);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+} catch (e) {
+  document.getElementById("err").textContent =
+    `${e.message} — serve the repository root over HTTP ` +
+    `(e.g. "python -m http.server" then open ` +
+    `/runtime/web/index.html); file:// blocks fetch. ` +
+    `Point at another rig with ?rig=path/to/rig.txt`;
+}
+</script>
+</body>
+</html>
