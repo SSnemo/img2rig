@@ -102,7 +102,19 @@ edge halos (color bleed missed a layer) and content showing *through* the
 figure (a starved mask left a hole — semi-transparent fabrics are the usual
 culprit; add positive points there and rerun).
 
-## 5. General discipline
+## 5. Small interventions between stages
+
+The pipeline's functions are library calls and the masks directory is the
+contract: any stage can be followed by a few lines of numpy that read a mask,
+apply a geometric correction, and write it back. The demo character needed
+four such moves — a y-floor clamp on the hair masks (a collar shadow was
+riding with the head), a distant-crumb connected-component filter on the arm
+masks, a third crop level for one bang-occluded eye, and a cloned "neck pad"
+appended to the z1 underlay so head sway reveals painted collar instead of
+background. Don't force these through the spec; script them, and record what
+you did in the character's notes.
+
+## 6. General discipline
 
 - One variable per iteration: change the point table *or* a threshold, not
   both, or you can't attribute the result.

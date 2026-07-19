@@ -3,6 +3,15 @@
 **Turn a single AI-generated illustration into a breathing, layered character
 rig — fully agent-driven.**
 
+<p align="center">
+  <img src="docs/media/preview_idle.gif" alt="idle: breathing, blinking, hair on springs" height="380">
+  <img src="docs/media/preview_showcase.gif" alt="showcase: hit, stagger, enrage" height="380">
+  <br>
+  <em>Mira, the bundled demo character: one txt2img illustration → 13 layers → idle / hit / stagger / enrage,
+  all procedural. Try it without installing anything GPU-side:
+  <code>img2rig preview --spec examples/mira/mira.yaml</code></em>
+</p>
+
 One text prompt in; out comes a character that breathes, blinks, sways her
 hair on spring physics, staggers when hit, and swings full-frame attack
 keyframes — with **zero manual rigging and zero manual mask painting**. The
@@ -70,6 +79,7 @@ Runtime tests: `cmake -S runtime/cpp -B build && cmake --build build && ctest`.
 |---|---|
 | `src/img2rig/` | Python pipeline (config-driven, one CLI) |
 | `examples/character.yaml` | the spec schema — prompts, part tables, SAM point tables, rig tree |
+| `examples/mira/` | complete demo character: iterated spec + exported 13-layer rig pack (CC0), renders offline via `img2rig preview` |
 | `runtime/cpp/img2rig/` | `rig_math.h` (parse/springs/solve, unit-tested) + `rig_player.h` (motion state machine, renderer-agnostic) |
 | `docs/` | [pipeline](docs/pipeline.md) · [rig format](docs/rig-format.md) · [agent playbook](docs/agent-playbook.md) |
 | `skill/img2rig-pipeline/` | drop-in skill for Claude Code agents operating the pipeline |

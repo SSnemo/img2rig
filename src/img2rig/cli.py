@@ -86,6 +86,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--base", help="base image for keyframe diff points "
                                   "(required with --kf)")
 
+    p = add("preview", "render an animated GIF/WebP preview of the exported rig")
+    p.add_argument("--script", default="idle", choices=["idle", "showcase"])
+    p.add_argument("--height", type=int, default=540)
+    p.add_argument("--fps", type=int, default=20)
+    p.add_argument("--out", default=None, help="output filename (in work_dir)")
+
     args = ap.parse_args(argv)
     spec = config.load(args.spec)
     client = _client(spec)
@@ -136,6 +142,9 @@ def main(argv: list[str] | None = None) -> None:
                 sys.exit("img2rig export: --kf requires --base")
             for frame, img in args.kf:
                 exp.keyframe(spec, client, frame, img, args.base)
+    elif args.cmd == "preview":
+        _stage("preview").run(spec, script=args.script, out_name=args.out,
+                              height=args.height, fps=args.fps)
 
 
 if __name__ == "__main__":

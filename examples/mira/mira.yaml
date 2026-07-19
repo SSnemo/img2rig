@@ -1,0 +1,542 @@
+name: mira
+work_dir: work/mira
+out_dir: out/mira
+sd:
+  api: http://127.0.0.1:7860
+  checkpoint: null
+  sampler: DPM++ 2M Karras
+  steps: 30
+  cfg: 7
+  base_size:
+  - 832
+  - 1216
+  hires:
+    scale: 2.0
+    upscaler: R-ESRGAN 4x+ Anime6B
+    denoise: 0.4
+    steps: 20
+  sam_model: sam_vit_h_4b8939.pth
+  dino_model: GroundingDINO_SwinT_OGC (694MB)
+prompt:
+  quality: (masterpiece, best quality:1.2), highly detailed
+  subject: 1girl, solo, young knight, short silver hair, blue and gold ornate armor,
+    ornate cape
+  style: dramatic rim light, dark fantasy
+  pose_constraints: full body, standing, looking at viewer, arms away from body, simple
+    background, dark background
+  negative: (worst quality, low quality:1.3), text, watermark, signature, card frame,
+    ornate border, hands clasped, crossed arms, weapon in front of body, extra limbs,
+    extra hands, multiple views, nsfw
+gen:
+  candidates: 12
+  seed0: 1000000
+  contact_tile:
+  - 300
+  - 439
+variants:
+  rage:
+    denoise: 0.55
+    cfg: 8
+    add: glowing red eyes, burning aura, glowing magic sigil, enraged
+keyframes:
+  identity: 1girl, solo, silver bob hair, blue eyes, golden ornate armor, black cape
+    with gold trim, white long skirt, blue sleeves
+  frames:
+    windup:
+      add: (arms up:1.5), (clenched fists above head:1.3), raising both arms overhead,
+        preparing an overhead strike, fierce expression
+      neg_add: arms at sides, arms down, hands at hips, hands on hips, arms behind
+        back
+    swing:
+      add: (leaning forward:1.4), (bent over:1.2), (arms swung downward:1.3), downward
+        smash follow-through, fierce shout
+      neg_add: arms up, arms raised, standing straight, hands on hips
+  mask:
+    band:
+    - 0.02
+    - 0.58
+    face_hole:
+      center:
+      - 0.549
+      - 0.19
+      radius:
+      - 0.15
+      - 0.13
+  denoise:
+    img2img: []
+    inpaint:
+    - 0.75
+    - 0.85
+    - 0.92
+  seeds: 2
+split:
+  parts:
+  - name: character
+    prompts:
+    - girl
+    thr: 0.3
+    min: 0.3
+    max: 0.75
+    pick: large
+  - name: hair
+    prompts:
+    - hair
+    thr: 0.3
+    min: 0.005
+    max: 0.08
+    pick: large
+  - name: face
+    prompts:
+    - face
+    thr: 0.3
+    min: 0.003
+    max: 0.03
+    pick: mid
+  - name: eyes
+    prompts:
+    - eyes
+    thr: 0.25
+    min: 5.0e-05
+    max: 0.002
+    pick: small
+  - name: brows
+    prompts:
+    - eyebrows
+    thr: 0.2
+    min: 5.0e-05
+    max: 0.0015
+    pick: small
+  - name: mouth
+    prompts:
+    - mouth
+    - lips
+    thr: 0.2
+    min: 5.0e-05
+    max: 0.004
+    pick: small
+  - name: cape
+    prompts:
+    - cape
+    - cloak
+    thr: 0.28
+    min: 0.03
+    max: 0.28
+    pick: large
+  - name: arms
+    prompts:
+    - arm
+    - sleeve
+    thr: 0.28
+    min: 0.01
+    max: 0.15
+    pick: mid
+  - name: legs
+    prompts:
+    - legs
+    thr: 0.3
+    min: 0.05
+    max: 0.25
+    pick: large
+  - name: armor
+    prompts:
+    - breastplate
+    thr: 0.28
+    min: 0.03
+    max: 0.3
+    pick: mid
+cleanup:
+  face_crop:
+  - 515
+  - 40
+  - 1115
+  - 640
+  eyes_band:
+    box:
+    - 200
+    - 145
+    - 430
+    - 265
+    scale: 3
+  face_parts:
+    eye_L:
+      pos:
+      - - 255
+        - 220
+      - - 262
+        - 222
+      neg:
+      - - 252
+        - 192
+      - - 255
+        - 250
+      - - 330
+        - 290
+      amax: 0.06
+      band: true
+    mouth:
+      pos:
+      - - 317
+        - 285
+      - - 325
+        - 284
+      neg:
+      - - 317
+        - 255
+      - - 317
+        - 318
+      - - 280
+        - 290
+      - - 355
+        - 290
+      - - 300
+        - 340
+      amax: 0.006
+      band: false
+  body_parts:
+    character:
+      pos:
+      - - 815
+        - 300
+      - - 815
+        - 700
+      - - 815
+        - 1000
+      - - 810
+        - 1500
+      - - 750
+        - 2000
+      - - 880
+        - 2000
+      - - 500
+        - 1200
+      - - 1140
+        - 1200
+      - - 815
+        - 2150
+      - - 815
+        - 2300
+      - - 815
+        - 520
+      - - 1125
+        - 900
+      - - 870
+        - 1080
+      - - 760
+        - 1080
+      neg:
+      - - 200
+        - 400
+      - - 1450
+        - 400
+      - - 150
+        - 1800
+      - - 1500
+        - 1800
+      - - 815
+        - 30
+      amin: 0.25
+      amax: 0.7
+    hair:
+      pos:
+      - - 815
+        - 120
+      - - 700
+        - 200
+      - - 930
+        - 200
+      - - 660
+        - 350
+      - - 970
+        - 380
+      neg:
+      - - 815
+        - 300
+      - - 550
+        - 120
+      - - 1080
+        - 120
+      - - 815
+        - 600
+      - - 640
+        - 600
+      - - 990
+        - 600
+      - - 815
+        - 480
+      - - 815
+        - 560
+      - - 700
+        - 620
+      - - 930
+        - 620
+      amin: 0.015
+      amax: 0.035
+    cape:
+      pos:
+      - - 470
+        - 1300
+      - - 1170
+        - 1300
+      - - 450
+        - 1800
+      - - 1190
+        - 1800
+      - - 560
+        - 800
+      neg:
+      - - 815
+        - 1500
+      - - 815
+        - 800
+      - - 250
+        - 1300
+      - - 1400
+        - 1300
+      - - 640
+        - 620
+      - - 990
+        - 620
+      amin: 0.08
+      amax: 0.3
+    arm_L:
+      pos:
+      - - 590
+        - 880
+      - - 525
+        - 1010
+      - - 510
+        - 1130
+      - - 490
+        - 1250
+      - - 470
+        - 1330
+      neg:
+      - - 400
+        - 1100
+      - - 420
+        - 1600
+      - - 730
+        - 900
+      - - 660
+        - 1600
+      - - 815
+        - 1000
+      amin: 0.008
+      amax: 0.05
+    arm_R:
+      pos:
+      - - 1085
+        - 880
+      - - 1145
+        - 1010
+      - - 1160
+        - 1130
+      - - 1185
+        - 1250
+      - - 1210
+        - 1330
+      neg:
+      - - 1280
+        - 1100
+      - - 1260
+        - 1600
+      - - 900
+        - 900
+      - - 990
+        - 1600
+      - - 815
+        - 1000
+      amin: 0.008
+      amax: 0.05
+    armor:
+      pos:
+      - - 815
+        - 620
+      - - 815
+        - 780
+      - - 815
+        - 950
+      - - 660
+        - 640
+      - - 970
+        - 640
+      - - 635
+        - 610
+      - - 625
+        - 670
+      - - 570
+        - 545
+      - - 640
+        - 560
+      - - 1130
+        - 530
+      - - 1060
+        - 560
+      neg:
+      - - 815
+        - 300
+      - - 815
+        - 1300
+      - - 480
+        - 1200
+      - - 1180
+        - 1200
+      - - 630
+        - 880
+      - - 1000
+        - 880
+      amin: 0.03
+      amax: 0.22
+    skirt:
+      pos:
+      - - 810
+        - 1300
+      - - 810
+        - 1700
+      - - 750
+        - 2100
+      - - 880
+        - 2100
+      neg:
+      - - 480
+        - 1500
+      - - 1180
+        - 1500
+      - - 815
+        - 950
+      - - 300
+        - 2200
+      - - 1350
+        - 2200
+      amin: 0.08
+      amax: 0.3
+  hair_split:
+    eyeline_y: 300
+    cheek_x:
+    - 700
+    - 950
+    min_blob: 800
+  glow:
+    variant: rage
+    roi:
+    - eye_L
+    - eye_R
+    roi_dilate: 61
+    red_gain: 50
+    any_diff: 100
+    min_blob: 300
+  inpaint:
+    rim_px: 12
+    skin_sample:
+    - 838
+    - 325
+    eye_pad_dilate: 13
+  assemble:
+    order:
+    - eye_L
+    - eye_R
+    - mouth
+    - hair_front
+    - hair_back
+    - arm_L
+    - arm_R
+    - armor
+    - skirt
+    - cape
+    head_zone_y: 520
+    close_r: 2
+    remainder_min_blob: 400
+rig:
+  canvas:
+  - 1232
+  - 1800
+  nodes:
+    body_pivot:
+      parent: root
+      pivot:
+      - 810
+      - 1500
+    head_pivot:
+      parent: body_pivot
+      pivot:
+      - 815
+      - 500
+  layers:
+    cape:
+      parent: body_pivot
+      z: 0
+      pivot:
+      - 815
+      - 620
+      spring:
+      - 28.0
+      - 5.5
+    body_remainder:
+      parent: body_pivot
+      z: 1
+    skirt:
+      parent: body_pivot
+      z: 2
+      pivot:
+      - 810
+      - 1250
+      spring:
+      - 34.0
+      - 6.0
+    arm_L:
+      parent: body_pivot
+      z: 4
+      pivot:
+      - 640
+      - 620
+    arm_R:
+      parent: body_pivot
+      z: 5
+      pivot:
+      - 990
+      - 620
+    armor:
+      parent: body_pivot
+      z: 6
+      pivot:
+      - 815
+      - 800
+    hair_back:
+      parent: head_pivot
+      z: 7
+      pivot:
+      - 815
+      - 250
+      spring:
+      - 46.0
+      - 6.5
+    head_base:
+      parent: head_pivot
+      z: 8
+      pivot:
+      - 815
+      - 500
+    mouth:
+      parent: head_pivot
+      z: 9
+    eye_L:
+      parent: head_pivot
+      z: 10
+    eye_R:
+      parent: head_pivot
+      z: 11
+    hair_front:
+      parent: head_pivot
+      z: 14
+      pivot:
+      - 815
+      - 150
+      spring:
+      - 60.0
+      - 8.0
+    sigil:
+      parent: head_pivot
+      z: 16
+      pivot:
+      - 815
+      - 250
