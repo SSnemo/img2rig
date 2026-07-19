@@ -1,0 +1,13 @@
+{
+  "name": "img2rig",
+  "version": "0.1.0",
+  "description": "Dependency-free Canvas player for img2rig character rigs - springs, breathing, blinks, hit/stagger/enrage motions from a single rig.txt layer pack.",
+  "type": "module",
+  "main": "rig-player.js",
+  "exports": "./rig-player.js",
+  "files": ["rig-player.js", "README.md"],
+  "keywords": ["stable-diffusion", "character-rig", "live2d-style", "animation", "canvas", "spring-physics"],
+  "repository": { "type": "git", "url": "git+https://github.com/SSnemo/img2rig.git", "directory": "runtime/web" },
+  "homepage": "https://github.com/SSnemo/img2rig",
+  "license": "Apache-2.0"
+}
