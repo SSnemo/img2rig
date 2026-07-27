@@ -390,6 +390,11 @@ public:
                 float open = std::max(0.08f, eyeOpen_);   //  reads as closing upward)
                 eyeDrop = n.h * sc * (1.0f - open) * 0.5f;
                 size.y *= open;
+                // fade out near closure: a fully squashed eye is a 2 px smear
+                // of iris color painted on the lid - let the skin backing in
+                // head_base take over instead
+                al *= std::min(1.0f, std::max(0.0f, (open - 0.12f) / 0.25f));
+                if (al < 0.01f) continue;
             }
             Vec2 at{center.x + (w.cx - doc_.canvasW * 0.5f) * sc,
                     center.y + (w.cy - doc_.canvasH * 0.5f) * sc + eyeDrop};

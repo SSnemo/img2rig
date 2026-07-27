@@ -304,6 +304,10 @@ export class RigPlayer {
         const open = Math.max(0.08, p.eyeOpen);
         eyeDrop = h * (1 - open) * 0.5; // blink anchors the bottom edge
         h *= open;
+        // fade out near closure: a fully squashed eye is a 2 px smear of
+        // iris color on the lid - let the skin backing take over
+        alpha *= Math.min(1, Math.max(0, (open - 0.12) / 0.25));
+        if (alpha < 0.01) continue;
       }
       ctx.save();
       ctx.globalAlpha = alpha;

@@ -361,6 +361,11 @@ def render_gif(rig_path: str, out_path: str, script: str = "idle",
                 eye_drop = h * (1.0 - open_) * 0.5
                 im = im.resize((w, max(1, int(h * open_))))
                 h = im.size[1]
+                # fade out near closure: a fully squashed eye is a 2 px smear
+                # of iris color on the lid - let the skin backing take over
+                alpha *= min(1.0, max(0.0, (open_ - 0.12) / 0.25))
+                if alpha < 0.01:
+                    continue
             if abs(rot) > 1e-4:
                 im = im.rotate(-math.degrees(rot), resample=Image.BICUBIC,
                                expand=True)
