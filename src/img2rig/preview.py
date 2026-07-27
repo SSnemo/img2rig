@@ -40,6 +40,7 @@ class Node:
     parent_idx: int = -1
     spring_a: float = 0.0
     spring_v: float = 0.0
+    prev_parent: float = 0.0  # parent angle last frame (for velocity drive)
 
 
 @dataclass
@@ -116,10 +117,17 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
                 local = p.head_angle + p.breath * 0.012
         elif n.spring:
             if dt > 0:
-                # bend included in the drive: cloth lags the whole-body tilt
+                # Inertial lag driven by the parent's angular VELOCITY (bend
+                # included): zero at steady state, so cloth lags while the
+                # parent moves and then always realigns exactly. An
+                # angle-proportional drive would bias the equilibrium against
+                # any held tilt - cloth visibly rotating the wrong way.
                 k, c = n.spring
+                rot_p = rot + p.bend
+                ang_vel = max(-6.0, min(6.0, (rot_p - n.prev_parent) / dt))
+                n.prev_parent = rot_p
                 n.spring_v += (-k * n.spring_a - c * n.spring_v
-                               - (rot + p.bend) * k * 0.6) * dt
+                               - ang_vel * k * 0.7) * dt
                 n.spring_a += n.spring_v * dt
             local = n.spring_a
         acc.append((rot + local, dx, dy))
@@ -205,17 +213,17 @@ class PlayerSim:
             self.flash = 0.10
             self.eye_shut = 0.16
             self.head_lag = 0.05  # head snaps a beat after the body
-            self.excite(0.8)  # springs mostly follow the bend now
+            # no random spring kicks: cloth follows the bend velocity
         elif motion == "stagger":
             self.hitstop = 0.10
-            self.bend_v += 1.0  # radians/s of ankle tilt
+            self.bend_v += 0.85  # radians/s of ankle tilt
             self.squash_v -= 2.6
             self.shake_t, self.shake_amp = 0.0, 9.0
             self.flash = 0.14
             self.eye_shut = 0.3
             self.head_lag = 0.06
             self.sink_pulse = 14.0  # knee-buckle, self-decaying
-            self.excite(1.5)  # springs mostly follow the bend now
+            # no random spring kicks: cloth follows the bend velocity
         elif motion == "enrage":
             self.rage_target = 1.0
             self.head_imp_v += 6.0

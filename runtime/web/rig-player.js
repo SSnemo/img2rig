@@ -36,7 +36,8 @@ function parseRig(text) {
                   w: parseFloat(t[5]), h: parseFloat(t[6]),
                   px: parseFloat(t[7]), py: parseFloat(t[8]),
                   parent: t[9], z: parseInt(t[10]),
-                  isLayer: true, spring: null, springA: 0, springV: 0 };
+                  isLayer: true, spring: null,
+                  springA: 0, springV: 0, prevParent: 0 };
       if (t[11] === "spring") n.spring = [parseFloat(t[12]), parseFloat(t[13])];
       nodes.push(n);
     }
@@ -67,10 +68,16 @@ function solve(rig, p, dt) {
       }
     } else if (n.spring) {
       if (dt > 0) {
-        // bend included in the drive: cloth lags the whole-body tilt
+        // Inertial lag driven by the parent's angular VELOCITY (bend
+        // included): zero at steady state, so cloth lags while the parent
+        // moves and then always realigns exactly. An angle-proportional
+        // drive biases the equilibrium against any held tilt - cloth
+        // visibly rotating the wrong way.
         const [k, c] = n.spring;
-        n.springV += (-k * n.springA - c * n.springV
-                      - (rot + (p.bend || 0)) * k * 0.6) * dt;
+        const rotP = rot + (p.bend || 0);
+        const angVel = Math.max(-6, Math.min(6, (rotP - n.prevParent) / dt));
+        n.prevParent = rotP;
+        n.springV += (-k * n.springA - c * n.springV - angVel * k * 0.7) * dt;
         n.springA += n.springV * dt;
       }
       local = n.springA;
@@ -161,17 +168,16 @@ export class RigPlayer {
     switch (motion) {
       // hit reactions: hitstop + squash + graded bend + lockstep shake +
       // flash (the old lean/kick pendulum hinged and swayed)
-      case "hit": // bendV in radians/s of ankle tilt; springs follow the bend
+      case "hit": // bendV in radians/s of ankle tilt; cloth follows the bend
         this.hitstop = 0.07; this.bendV += 0.6; this.squashV -= 1.6;
         this.shakeT = 0; this.shakeAmp = 5; this.flash = 0.10;
-        this.eyeShut = 0.16; this.headLag = 0.05; this.excite(0.8); break;
+        this.eyeShut = 0.16; this.headLag = 0.05; break;
       case "lunge":
         this.kickV -= 260; this.leanTo(-0.06, 0.35); break;
       case "stagger":
-        this.hitstop = 0.10; this.bendV += 1.0; this.squashV -= 2.6;
+        this.hitstop = 0.10; this.bendV += 0.85; this.squashV -= 2.6;
         this.shakeT = 0; this.shakeAmp = 9; this.flash = 0.14;
-        this.eyeShut = 0.3; this.headLag = 0.06; this.sinkPulse = 14;
-        this.excite(1.5); break;
+        this.eyeShut = 0.3; this.headLag = 0.06; this.sinkPulse = 14; break;
       case "collapse":
         this.sinkTarget = 26; this.leanTo(0.13, 0); break;
       case "recover":

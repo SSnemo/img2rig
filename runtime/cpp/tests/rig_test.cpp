@@ -96,12 +96,16 @@ int main() {
         if (d.nodes[i].isLayer) CHECK(std::fabs(xf[i].alpha - 0.5f) < 1e-6);
     p = Params{};
 
-    // springs respond to a leaning parent when dt > 0, and layers without
-    // springs stay rigid
+    // springs are velocity-driven: a sudden parent rotation makes the cape
+    // lag transiently, but a HELD rotation must end with the cape exactly
+    // realigned (an angle-proportional drive would leave it permanently
+    // rotated against the body - the "cape separates" bug)
     p.lean = 0.3f;
     for (int i = 0; i < 30; i++) solve(d, p, 1.0f / 60.0f, xf);
-    CHECK(std::fabs(xf[2].rot - 0.3f) > 1e-3);    // cape lags the parent
+    CHECK(std::fabs(xf[2].rot - 0.3f) > 1e-3);    // cape lags the step
     CHECK(std::fabs(xf[3].rot - 0.3f) < 1e-4);    // body follows exactly
+    for (int i = 0; i < 600; i++) solve(d, p, 1.0f / 60.0f, xf);
+    CHECK(std::fabs(xf[2].rot - 0.3f) < 0.01f);   // ...then realigns fully
 
     // ---- player: load from disk, update, draw through the callback ----
     const char* tmp = "rig_test_tmp.txt";

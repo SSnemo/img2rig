@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <string>
@@ -27,6 +28,7 @@ struct Node {
     bool hasSpring = false;
     float k = 0, c = 0;             // spring stiffness / damping
     float springA = 0, springV = 0; // runtime spring angle / angular velocity
+    float prevParent = 0;           // runtime: parent angle last frame (for velocity)
 };
 
 struct Doc {
@@ -152,11 +154,19 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
             }
         } else if (n.hasSpring) {
             if (dt > 0) {
-                // Parent angular-velocity approximation: drive against the
-                // accumulated parent angle (bend included, so cloth lags the
-                // whole-body tilt coherently) - the spring lags then follows.
+                // Inertial lag driven by the parent's angular VELOCITY (bend
+                // included). Driving by the parent's angle - the obvious
+                // first attempt - biases the spring's equilibrium *against*
+                // any held rotation, so cloth visibly rotates the wrong way
+                // whenever the body holds a tilt. Velocity drive is zero at
+                // steady state: cloth lags while the parent moves, then
+                // always realigns exactly.
+                float rotP = rot + p.bendX;
+                float angVel = (rotP - n.prevParent) / dt;
+                angVel = std::min(6.0f, std::max(-6.0f, angVel));
+                n.prevParent = rotP;
                 springStep(n.springA, n.springV, n.k, n.c,
-                           -(rot + p.bendX) * n.k * 0.6f, dt);
+                           -angVel * n.k * 0.7f, dt);
             }
             localRot = n.springA;
         }

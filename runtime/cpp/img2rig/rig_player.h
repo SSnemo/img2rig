@@ -92,7 +92,7 @@ public:
                 flash_ = 0.10f;
                 eyeShut_ = 0.16f;
                 headLag_ = 0.05f; // head snaps a beat after the body (cascade)
-                exciteSprings(0.8f); // springs mostly follow the bend now
+                // no random spring kicks: cloth follows the bend velocity
                 break;
             case M::Lunge:
                 kickV_ -= 260;
@@ -100,7 +100,7 @@ public:
                 break;
             case M::Stagger:
                 hitstop_ = 0.10f;
-                bendV_ += 1.0f; // radians/s of ankle tilt
+                bendV_ += 0.85f; // radians/s of ankle tilt
                 squashV_ -= 2.6f;
                 shakeT_ = 0;
                 shakeAmp_ = 9.0f;
@@ -108,7 +108,7 @@ public:
                 eyeShut_ = 0.3f;
                 headLag_ = 0.06f;
                 sinkPulse_ = 14.0f; // brief knee-buckle, decays on its own
-                exciteSprings(1.5f); // springs mostly follow the bend now
+                // no random spring kicks: cloth follows the bend velocity
                 break;
             case M::Collapse:
                 sinkTarget_ = 26;
