@@ -110,7 +110,9 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
         local = 0.0
         if not n.is_layer:
             if n.name == "body_pivot":
-                local = p.lean
+                # translations only - lean joined bend as a ground-anchored
+                # whole-rig tilt (a mid-body rotation pivot moves layers
+                # below it the opposite way: a second rotation center)
                 dx += p.kick_x
                 dy += p.sink - p.breath * 6.0
             elif n.name == "head_pivot":
@@ -146,20 +148,21 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
         chain_rot = 0.0
         for ci in reversed(chain):
             pn = rig.nodes[ci]
-            pr = (p.lean if pn.name == "body_pivot"
-                  else (p.head_angle + p.breath * 0.012) if pn.name == "head_pivot"
-                  else 0.0)
+            pr = ((p.head_angle + p.breath * 0.012)
+                  if pn.name == "head_pivot" else 0.0)
             if pr:
                 cx, cy = _rot(pn.px, pn.py, cx, cy, pr)
             chain_rot += pr
         wx, wy = cx + dx, cy + dy
         rot_out = chain_rot + local + arm
-        if p.bend and rig.canvas[1] > 0:
-            # rigid tilt about the ground anchor: identical transform for
-            # every layer, so nothing can separate
+        tilt = p.bend + p.lean  # impulse tilt + held pose tilt
+        if tilt and rig.canvas[1] > 0:
+            # THE single rotation center: all whole-body rotation happens
+            # rigidly around the ground anchor; articulation joints (head,
+            # arms) are the only sanctioned exceptions
             ax, gy = _bend_anchor(rig), rig.canvas[1]
-            wx, wy = _rot(ax, gy, wx, wy, p.bend)
-            rot_out += p.bend
+            wx, wy = _rot(ax, gy, wx, wy, tilt)
+            rot_out += tilt
         out.append((wx, wy, rot_out, p.fade))
     return out
 
@@ -193,7 +196,6 @@ class PlayerSim:
         self.squash, self.squash_v = 1.0, 0.0
         self.shake_t, self.shake_amp = 9e9, 0.0
         self.flash = 0.0
-        self.head_lag = 0.0
         self.sink_pulse = 0.0
 
     def excite(self, v: float) -> None:
@@ -212,8 +214,8 @@ class PlayerSim:
             self.shake_t, self.shake_amp = 0.0, 5.0
             self.flash = 0.10
             self.eye_shut = 0.16
-            self.head_lag = 0.05  # head snaps a beat after the body
-            # no random spring kicks: cloth follows the bend velocity
+            # no head snap, no spring kicks: a hit moves the rig around
+            # exactly one center
         elif motion == "stagger":
             self.hitstop = 0.10
             self.bend_v += 0.85  # radians/s of ankle tilt
@@ -221,13 +223,11 @@ class PlayerSim:
             self.shake_t, self.shake_amp = 0.0, 9.0
             self.flash = 0.14
             self.eye_shut = 0.3
-            self.head_lag = 0.06
             self.sink_pulse = 14.0  # knee-buckle, self-decaying
-            # no random spring kicks: cloth follows the bend velocity
+            # no head snap, no spring kicks: single-center only
         elif motion == "enrage":
             self.rage_target = 1.0
-            self.head_imp_v += 6.0
-            self.excite(4.0)
+            self.shake_t, self.shake_amp = 0.0, 6.5  # uniform tremor
         elif motion == "calm":
             self.rage_target = 0.0
 
@@ -237,10 +237,6 @@ class PlayerSim:
             self.flash = max(0.0, self.flash - dt * 0.6)
             return self._params()
         self.t += dt
-        if self.head_lag > 0:  # delayed head snap (overlap/follow-through)
-            self.head_lag -= dt
-            if self.head_lag <= 0:
-                self.head_imp_v += 4.0
         # critically damped: one overshoot max, never a pendulum. These
         # springs are stiff (c*dt must stay < 2), so integrate in substeps -
         # a 15 fps preview would otherwise diverge.
@@ -272,7 +268,8 @@ class PlayerSim:
             if self.lean_return <= 0:
                 self.lean_target = 0.0
         self.lean += (self.lean_target - self.lean) * min(1.0, dt * 6.0)
-        self.kick_v += (-90.0 * self.kick - 9.0 * self.kick_v) * dt
+        # near-critically damped: one dart out, one settle, never a metronome
+        self.kick_v += (-90.0 * self.kick - 19.0 * self.kick_v) * dt
         self.kick += self.kick_v * dt
         self.head_imp_v += (-70.0 * self.head_imp - 7.5 * self.head_imp_v) * dt
         self.head_imp += self.head_imp_v * dt

@@ -62,7 +62,9 @@ function solve(rig, p, dt) {
     let local = 0;
     if (!n.isLayer) {
       if (n.name === "body_pivot") {
-        local = p.lean; dx += p.kickX; dy += p.sink - p.breath * 6.0;
+        // translations only - lean joined bend as a ground-anchored tilt
+        // (a mid-body rotation pivot moves layers below it the opposite way)
+        dx += p.kickX; dy += p.sink - p.breath * 6.0;
       } else if (n.name === "head_pivot") {
         local = p.headAngle + p.breath * 0.012;
       }
@@ -94,19 +96,20 @@ function solve(rig, p, dt) {
     let chainRot = 0;
     for (let ci = chain.length - 1; ci >= 0; ci--) {
       const pn = rig.nodes[chain[ci]];
-      const pr = pn.name === "body_pivot" ? p.lean
-               : pn.name === "head_pivot" ? p.headAngle + p.breath * 0.012 : 0;
+      const pr = pn.name === "head_pivot" ? p.headAngle + p.breath * 0.012 : 0;
       if (pr) [cx, cy] = rotAround(pn.px, pn.py, cx, cy, pr);
       chainRot += pr;
     }
     let wx = cx + dx, wy = cy + dy, rotOut = chainRot + local + arm;
-    if (p.bend && rig.canvas[1] > 0) {
-      // rigid tilt about the ground anchor: identical transform for every
-      // layer, so nothing can separate
+    const tilt = (p.bend || 0) + (p.lean || 0); // impulse + held pose tilt
+    if (tilt && rig.canvas[1] > 0) {
+      // THE single rotation center: all whole-body rotation happens rigidly
+      // around the ground anchor; articulation joints (head, arms) are the
+      // only sanctioned exceptions
       const bp = rig.nodes.find(m => !m.isLayer && m.name === "body_pivot");
       const ax = bp ? bp.px : rig.canvas[0] * 0.5;
-      [wx, wy] = rotAround(ax, rig.canvas[1], wx, wy, p.bend);
-      rotOut += p.bend;
+      [wx, wy] = rotAround(ax, rig.canvas[1], wx, wy, tilt);
+      rotOut += tilt;
     }
     out.push([wx, wy, rotOut, p.fade]);
   }
@@ -152,7 +155,7 @@ export class RigPlayer {
     this.hitstop = 0; this.bend = 0; this.bendV = 0;
     this.squash = 1; this.squashV = 0;
     this.shakeT = 9e9; this.shakeAmp = 0;
-    this.flash = 0; this.headLag = 0; this.sinkPulse = 0;
+    this.flash = 0; this.sinkPulse = 0;
     for (const n of this.rig.nodes) if (n.spring) { n.springA = 0; n.springV = 0; }
     this.params = null;
     this.xf = null;
@@ -168,23 +171,25 @@ export class RigPlayer {
     switch (motion) {
       // hit reactions: hitstop + squash + graded bend + lockstep shake +
       // flash (the old lean/kick pendulum hinged and swayed)
-      case "hit": // bendV in radians/s of ankle tilt; cloth follows the bend
+      // hit reactions move the rig around exactly one center: no head
+      // snaps, no spring kicks
+      case "hit":
         this.hitstop = 0.07; this.bendV += 0.6; this.squashV -= 1.6;
         this.shakeT = 0; this.shakeAmp = 5; this.flash = 0.10;
-        this.eyeShut = 0.16; this.headLag = 0.05; break;
+        this.eyeShut = 0.16; break;
       case "lunge":
         this.kickV -= 260; this.leanTo(-0.06, 0.35); break;
       case "stagger":
         this.hitstop = 0.10; this.bendV += 0.85; this.squashV -= 2.6;
         this.shakeT = 0; this.shakeAmp = 9; this.flash = 0.14;
-        this.eyeShut = 0.3; this.headLag = 0.06; this.sinkPulse = 14; break;
+        this.eyeShut = 0.3; this.sinkPulse = 14; break;
       case "collapse":
         this.sinkTarget = 26; this.leanTo(0.13, 0); break;
       case "recover":
         this.sinkTarget = 0; this.leanTo(0, 0); this.fadeTarget = 1;
         this.eyeShut = 0; break;
-      case "enrage":
-        this.rageTarget = 1; this.headImpV += 6; this.excite(4.0); break;
+      case "enrage": // power-surge tremor as a uniform shake
+        this.rageTarget = 1; this.shakeT = 0; this.shakeAmp = 6.5; break;
       case "calm": this.rageTarget = 0; break;
       case "heal": this.headImpV -= 2.5; break;
       case "windup": this.leanTo(-0.045, 0.4); break;
@@ -205,10 +210,6 @@ export class RigPlayer {
       return;
     }
     this.t += dt;
-    if (this.headLag > 0) { // delayed head snap (overlap/follow-through)
-      this.headLag -= dt;
-      if (this.headLag <= 0) this.headImpV += 4.0;
-    }
     // critically damped: one overshoot max, never a pendulum. Stiff springs
     // (c*dt must stay < 2): substep so low frame rates don't diverge.
     const nSub = Math.max(1, Math.floor(dt * 120) + 1), hSub = dt / nSub;
@@ -241,7 +242,8 @@ export class RigPlayer {
       if (this.leanReturn <= 0) this.leanTarget = 0;
     }
     this.lean += (this.leanTarget - this.lean) * Math.min(1, dt * 6);
-    this.kickV += (-90 * this.kick - 9 * this.kickV) * dt;
+    // near-critically damped: one dart out, one settle, never a metronome
+    this.kickV += (-90 * this.kick - 19 * this.kickV) * dt;
     this.kick += this.kickV * dt;
     this.headImpV += (-70 * this.headImp - 7.5 * this.headImpV) * dt;
     this.headImp += this.headImpV * dt;

@@ -91,8 +91,9 @@ public:
                 shakeAmp_ = 5.0f;
                 flash_ = 0.10f;
                 eyeShut_ = 0.16f;
-                headLag_ = 0.05f; // head snaps a beat after the body (cascade)
-                // no random spring kicks: cloth follows the bend velocity
+                // no head snap and no spring kicks: a hit moves the rig
+                // around exactly one center (hair whipped around its own
+                // root otherwise)
                 break;
             case M::Lunge:
                 kickV_ -= 260;
@@ -106,9 +107,8 @@ public:
                 shakeAmp_ = 9.0f;
                 flash_ = 0.14f;
                 eyeShut_ = 0.3f;
-                headLag_ = 0.06f;
                 sinkPulse_ = 14.0f; // brief knee-buckle, decays on its own
-                // no random spring kicks: cloth follows the bend velocity
+                // no head snap, no spring kicks: single-center only
                 break;
             case M::Collapse:
                 sinkTarget_ = 26;
@@ -120,8 +120,8 @@ public:
                 break;
             case M::Enrage:
                 rageTarget_ = 1;
-                headImpV_ += 6.0f;
-                exciteSprings(4.0f);
+                shakeT_ = 0;      // power-surge tremor as a uniform shake -
+                shakeAmp_ = 6.5f; // random spring kicks read as separation
                 break;
             case M::Heal: headImpV_ -= 2.5f; break;
             case M::Windup:
@@ -185,21 +185,21 @@ public:
         armRate_ = 17.0f;
         float amp = poseFury_ ? 1.2f : 1.0f;
         switch (poseStyle_) {
-            case StrikeStyle::Sweep: // whip through: forward lunge + cape lash
+            case StrikeStyle::Sweep: // whip through: forward dart + shake
                 armRT_ = -0.14f * amp;
                 armLT_ = 0.04f;
                 leanTo(-0.13f * amp, 0.4f);
                 kickV_ -= 380 * amp;
-                headImpV_ -= 3.0f;
-                exciteSprings(3.2f * amp);
+                shakeT_ = 0;
+                shakeAmp_ = 5.0f * amp;
                 break;
             case StrikeStyle::Smash: // slam: the downward spike reads
                 armLT_ = 0.08f * amp;
                 armRT_ = -0.08f * amp;
                 leanTo(-0.10f * amp, 0.4f);
                 slam_ = 26.0f * amp;
-                headImpV_ += 4.0f;
-                exciteSprings(4.0f * amp);
+                shakeT_ = 0;
+                shakeAmp_ = 6.0f * amp;
                 break;
             case StrikeStyle::Burst: // forward pulse + glow flash
                 armLT_ = 0.03f;
@@ -207,7 +207,8 @@ public:
                 leanTo(-0.10f * amp, 0.4f);
                 kickV_ -= 320 * amp;
                 charge_ = std::min(1.0f, charge_ + 0.5f);
-                exciteSprings(4.2f * amp);
+                shakeT_ = 0;
+                shakeAmp_ = 6.0f * amp;
                 break;
         }
         sinkTarget_ = 0;
@@ -233,10 +234,6 @@ public:
             return;
         }
         t_ += dt;
-        if (headLag_ > 0) { // delayed head snap (overlap/follow-through)
-            headLag_ -= dt;
-            if (headLag_ <= 0) headImpV_ += 4.0f;
-        }
         // critically damped: one overshoot max, never a pendulum. Stiff
         // springs (c*dt must stay < 2): integrate in substeps so low frame
         // rates don't diverge.
@@ -260,8 +257,8 @@ public:
             trembleT_ -= dt; // sustained tremble (denser and stronger when furious)
             if (trembleT_ <= 0) {
                 trembleT_ = poseFury_ ? 0.26f : 0.55f;
-                exciteSprings(poseFury_ ? 1.1f : 0.5f);
-                if (poseFury_) headImpV_ += (frand() - 0.5f) * 3.0f;
+                shakeT_ = 0; // tremble = uniform shake pulses, never spring kicks
+                shakeAmp_ = poseFury_ ? 2.4f : 1.2f;
             }
         } else if (pose_ == Pose::Release) {
             poseT_ += dt;
@@ -291,7 +288,9 @@ public:
             if (leanReturn_ <= 0) leanTarget_ = 0;
         }
         lean_ += (leanTarget_ - lean_) * std::min(1.0f, dt * 6.0f);
-        springStep(kick_, kickV_, 90.0f, 9.0f, 0, dt);      // hit recoil, damped return
+        // near-critically damped (c ~ 2*sqrt(k)): one dart out, one settle
+        // back, never a metronome
+        springStep(kick_, kickV_, 90.0f, 19.0f, 0, dt);
         springStep(headImp_, headImpV_, 70.0f, 7.5f, 0, dt); // head-shake impulse
         sink_ += (sinkTarget_ - sink_) * std::min(1.0f, dt * 4.0f);
         rage_ += (rageTarget_ - rage_) * std::min(1.0f, dt * 3.0f);
@@ -432,7 +431,7 @@ private:
         armL_ = armLT_ = armR_ = armRT_ = 0; armRate_ = 5.0f;
         charge_ = chargeT_ = 0; chargeRate_ = 4.0f; slam_ = 0;
         hitstop_ = 0; bend_ = bendV_ = 0; squash_ = 1; squashV_ = 0;
-        shakeT_ = 9e9f; shakeAmp_ = 0; flash_ = 0; headLag_ = 0; sinkPulse_ = 0;
+        shakeT_ = 9e9f; shakeAmp_ = 0; flash_ = 0; sinkPulse_ = 0;
     }
     void leanTo(float target, float returnAfter) {
         leanTarget_ = target;
@@ -470,7 +469,7 @@ private:
     float bend_ = 0, bendV_ = 0;
     float squash_ = 1, squashV_ = 0;
     float shakeT_ = 9e9f, shakeAmp_ = 0;
-    float flash_ = 0, headLag_ = 0, sinkPulse_ = 0;
+    float flash_ = 0, sinkPulse_ = 0;
     unsigned rnd_ = 12345;
 };
 

@@ -146,7 +146,10 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
         float localRot = 0;
         if (!n.isLayer) {
             if (n.name == "body_pivot") {
-                localRot = p.lean;
+                // translations only - lean joined bendX as a ground-anchored
+                // whole-rig rotation (see below). Rotating here, around a
+                // mid-body pivot, moved every layer below the pivot the
+                // opposite way: a second rotation center.
                 dx += p.kickX;
                 dy += p.sink - p.breath * 6.0f;
             } else if (n.name == "head_pivot") {
@@ -201,9 +204,8 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
         }
         for (int ci = cn - 1; ci >= 0; ci--) {
             Node& pn = d.nodes[chain[ci]];
-            float pr = (pn.name == "body_pivot")   ? p.lean
-                       : (pn.name == "head_pivot") ? (p.headAngle + p.breath * 0.012f)
-                                                   : 0.0f;
+            float pr = (pn.name == "head_pivot")
+                           ? (p.headAngle + p.breath * 0.012f) : 0.0f;
             if (pr != 0.0f) {
                 float s = std::sin(pr), co = std::cos(pr);
                 float ox = rcx - pn.px, oy = rcy - pn.py;
@@ -216,14 +218,18 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
         out[i].cy = rcy + dy;
         out[i].rot = chainRot + localRot + armRot;
         out[i].alpha = p.fade;
-        if (p.bendX != 0.0f && d.canvasH > 0) {
-            // rigid tilt about the ground anchor: identical transform for
-            // every layer, so nothing can separate
-            float s = std::sin(p.bendX), co = std::cos(p.bendX);
+        float tilt = p.bendX + p.lean; // impulse tilt + held pose tilt
+        if (tilt != 0.0f && d.canvasH > 0) {
+            // THE single rotation center: every whole-body rotation - hit
+            // bends and held leans alike - happens rigidly around the ground
+            // anchor, so no two parts can ever rotate around different
+            // centers. Articulation joints (head sway, strike arms) are the
+            // only sanctioned exceptions.
+            float s = std::sin(tilt), co = std::cos(tilt);
             float ox = out[i].cx - anchorX, oy = out[i].cy - d.canvasH;
             out[i].cx = anchorX + ox * co - oy * s;
             out[i].cy = d.canvasH + ox * s + oy * co;
-            out[i].rot += p.bendX;
+            out[i].rot += tilt;
         }
     }
 }

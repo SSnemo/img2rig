@@ -31,14 +31,15 @@ static const char* kRig =
     "layer body body.png 350 400 300 900 500 900 body_pivot 1\n"
     "layer arm_L arm_l.png 250 500 150 400 320 520 body_pivot 2\n"
     "layer head head.png 400 100 240 300 520 300 head_pivot 3\n"
-    "layer eye_L eye_l.png 460 200 40 25 480 212 head_pivot 4\n";
+    "layer eye_L eye_l.png 460 200 40 25 480 212 head_pivot 4\n"
+    "layer hair hair.png 420 80 200 150 520 300 head_pivot 5 spring 40 6\n";
 
 int main() {
     // ---- parsing ----
     Doc d = parse(kRig);
     CHECK(d.valid());
     CHECK(d.canvasW == 1000 && d.canvasH == 1500);
-    CHECK(d.nodes.size() == 7);
+    CHECK(d.nodes.size() == 8);
     CHECK(!d.nodes[0].isLayer && d.nodes[0].name == "body_pivot");
     CHECK(d.nodes[0].parentIdx == -1);          // root
     CHECK(d.nodes[1].parentIdx == 0);           // head_pivot -> body_pivot
@@ -66,14 +67,15 @@ int main() {
     CHECK(std::fabs(xf[3].cy - (850.0f - 6.0f)) < 1e-3);
     p.breath = 0.0f;
 
-    // lean rotates layers around body_pivot; head chain accumulates headAngle
+    // lean is a held whole-rig tilt around the SAME ground anchor as bendX -
+    // a mid-body pivot would move layers below it the opposite way
     p.lean = 0.3f;
     solve(d, p, 0, xf);
     CHECK(std::fabs(xf[3].rot - 0.3f) < 1e-4);
-    {   // hand-rotate the body center around the pivot and compare
-        float ox = 500.0f - 500.0f, oy = 850.0f - 900.0f;
+    {   // hand-rotate the body center around the ground anchor and compare
+        float ox = 500.0f - 500.0f, oy = 850.0f - 1500.0f;
         float s = std::sin(0.3f), c = std::cos(0.3f);
-        float ex = 500.0f + ox * c - oy * s, ey = 900.0f + ox * s + oy * c;
+        float ex = 500.0f + ox * c - oy * s, ey = 1500.0f + ox * s + oy * c;
         CHECK(std::fabs(xf[3].cx - ex) < 1e-3 && std::fabs(xf[3].cy - ey) < 1e-3);
     }
     p.headAngle = 0.2f;
@@ -96,16 +98,16 @@ int main() {
         if (d.nodes[i].isLayer) CHECK(std::fabs(xf[i].alpha - 0.5f) < 1e-6);
     p = Params{};
 
-    // springs are velocity-driven: a sudden parent rotation makes the cape
-    // lag transiently, but a HELD rotation must end with the cape exactly
-    // realigned (an angle-proportional drive would leave it permanently
-    // rotated against the body - the "cape separates" bug)
-    p.lean = 0.3f;
+    // springs answer to ARTICULATION only (velocity-driven, so they lag a
+    // sudden head turn then realign exactly); whole-rig tilts must leave
+    // them untouched
+    p = Params{};
+    p.headAngle = 0.25f;
     for (int i = 0; i < 30; i++) solve(d, p, 1.0f / 60.0f, xf);
-    CHECK(std::fabs(xf[2].rot - 0.3f) > 1e-3);    // cape lags the step
-    CHECK(std::fabs(xf[3].rot - 0.3f) < 1e-4);    // body follows exactly
+    CHECK(std::fabs(xf[7].rot - 0.25f) > 1e-3);   // hair lags the head step
+    CHECK(std::fabs(d.nodes[2].springA) < 1e-6);  // body cape: no drive at all
     for (int i = 0; i < 600; i++) solve(d, p, 1.0f / 60.0f, xf);
-    CHECK(std::fabs(xf[2].rot - 0.3f) < 0.01f);   // ...then realigns fully
+    CHECK(std::fabs(xf[7].rot - 0.25f) < 0.01f);  // ...then realigns fully
 
     // hit tilts are single-center rigid: bendX must never excite a spring
     // (a spring lag is an opposite rotation around its own pivot - a second
@@ -116,10 +118,11 @@ int main() {
         Params p2;
         for (int i = 0; i < 60; i++) {
             p2.bendX = 0.05f * std::sin(i * 0.3f); // vigorous bend wiggle
+            p2.lean = 0.04f * std::sin(i * 0.2f);  // plus a moving held tilt
             solve(d2, p2, 1.0f / 60.0f, xf2);
         }
         CHECK(std::fabs(d2.nodes[2].springA) < 1e-6); // cape spring untouched
-        CHECK(std::fabs(xf2[2].rot - p2.bendX) < 1e-4); // cape = pure bend
+        CHECK(std::fabs(xf2[2].rot - (p2.bendX + p2.lean)) < 1e-4); // pure tilt
     }
 
     // ---- player: load from disk, update, draw through the callback ----
@@ -139,7 +142,7 @@ int main() {
         CHECK(!file.empty() && size.x > 0 && size.y > 0 && tint.a > 0);
         return true;
     }, {400, 300}, 600.0f);
-    CHECK(drawn == 5);
+    CHECK(drawn == 6);
     (void)zPrev;
 
     // bendX is a rigid ankle tilt: every layer gets the SAME rotation (zero
@@ -185,7 +188,7 @@ int main() {
         drawn++;
         return true;
     }, {400, 300}, 600.0f);
-    CHECK(drawn == 5);
+    CHECK(drawn == 6);
     player.strikeRelease();
     for (int i = 0; i < 60; i++) player.update(1.0f / 60.0f);
     CHECK(!player.strikePosed());                  // auto-settled
