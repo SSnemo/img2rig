@@ -14,6 +14,6 @@ layer hair_back mira_hair_back.png 464.8 209.5 329 147 603.2 185.0 head_pivot 7 
 layer head_base mira_head_base.png 461.1 0.0 388 385 603.2 370.1 head_pivot 8
 layer mouth mira_mouth.png 596.5 149.5 85 124 639.1 211.7 head_pivot 9
 layer eye_L mira_eye_L.png 548.4 183.6 32 23 564.4 195.0 head_pivot 10
-layer eye_R mira_eye_R.png 632.8 165.8 39 38 652.4 185.0 head_pivot 11
+layer eye_R mira_eye_R.png 626.0 134.0 54 58 653.0 163.0 head_pivot 11
 layer hair_front mira_hair_front.png 461.1 0.0 305 348 603.2 111.0 head_pivot 14 spring 60.0 8.0
 layer sigil mira_sigil.png 538.8 149.5 145 98 603.2 185.0 head_pivot 16
