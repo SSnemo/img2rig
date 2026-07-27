@@ -42,7 +42,10 @@ import { RigPlayer } from "./rig-player.js";
 const cv = document.getElementById("cv");
 const ctx = cv.getContext("2d");
 const params = new URLSearchParams(location.search);
-const rigUrl = params.get("rig") ?? "../../examples/mira/rig/rig.txt";
+// session-stamped version query: RigPlayer propagates it to the layer
+// images, so rig.txt and its PNGs can never pair across cache generations
+const rigUrl = (params.get("rig") ?? "../../examples/mira/rig/rig.txt")
+               + "?v=" + Date.now();
 
 const MOTIONS = ["hit", "lunge", "stagger", "windup", "collapse", "recover",
                  "enrage", "calm", "heal", "die"];

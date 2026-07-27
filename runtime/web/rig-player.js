@@ -119,10 +119,14 @@ function solve(rig, p, dt) {
 // ---- player ----
 
 export class RigPlayer {
-  /** Load rig.txt and all layer images. baseUrl defaults to rig.txt's dir. */
+  /** Load rig.txt and all layer images. baseUrl defaults to rig.txt's dir.
+   *  Any query string on rigUrl propagates to the image requests, so one
+   *  ?v=N busts the whole pack - otherwise a refreshed rig.txt can pair
+   *  with stale cached layer images (which scrambles blinks and bboxes). */
   static async load(rigUrl) {
-    const text = await (await fetch(rigUrl)).text();
+    const text = await (await fetch(rigUrl, { cache: "no-cache" })).text();
     const rig = parseRig(text);
+    const q = rigUrl.includes("?") ? rigUrl.slice(rigUrl.indexOf("?")) : "";
     const base = rigUrl.slice(0, rigUrl.lastIndexOf("/") + 1);
     const player = new RigPlayer(rig);
     await Promise.all(rig.nodes.filter(n => n.isLayer).map(n =>
@@ -130,7 +134,7 @@ export class RigPlayer {
         const im = new Image();
         im.onload = () => { player.images.set(n.name, im); res(); };
         im.onerror = () => rej(new Error("failed to load " + n.file));
-        im.src = base + n.file;
+        im.src = base + n.file + q;
       })));
     return player;
   }
