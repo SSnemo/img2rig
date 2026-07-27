@@ -67,8 +67,10 @@ function solve(rig, p, dt) {
       }
     } else if (n.spring) {
       if (dt > 0) {
+        // bend included in the drive: cloth lags the whole-body tilt
         const [k, c] = n.spring;
-        n.springV += (-k * n.springA - c * n.springV - rot * k * 0.6) * dt;
+        n.springV += (-k * n.springA - c * n.springV
+                      - (rot + (p.bend || 0)) * k * 0.6) * dt;
         n.springA += n.springV * dt;
       }
       local = n.springA;
@@ -90,16 +92,16 @@ function solve(rig, p, dt) {
       if (pr) [cx, cy] = rotAround(pn.px, pn.py, cx, cy, pr);
       chainRot += pr;
     }
-    let wx = cx + dx, rotOut = chainRot + local + arm;
+    let wx = cx + dx, wy = cy + dy, rotOut = chainRot + local + arm;
     if (p.bend && rig.canvas[1] > 0) {
-      // height-graded bend: shear from the resting center, feet planted -
-      // the body flexes like a reed instead of hinging around one pivot
-      const rcy0 = n.y + n.h * 0.5;
-      const f = Math.pow(Math.max(0, (rig.canvas[1] - rcy0) / rig.canvas[1]), 1.7);
-      wx += p.bend * 90.0 * f;
-      rotOut += p.bend * 0.10 * f;
+      // rigid tilt about the ground anchor: identical transform for every
+      // layer, so nothing can separate
+      const bp = rig.nodes.find(m => !m.isLayer && m.name === "body_pivot");
+      const ax = bp ? bp.px : rig.canvas[0] * 0.5;
+      [wx, wy] = rotAround(ax, rig.canvas[1], wx, wy, p.bend);
+      rotOut += p.bend;
     }
-    out.push([wx, cy + dy, rotOut, p.fade]);
+    out.push([wx, wy, rotOut, p.fade]);
   }
   return out;
 }
@@ -159,17 +161,17 @@ export class RigPlayer {
     switch (motion) {
       // hit reactions: hitstop + squash + graded bend + lockstep shake +
       // flash (the old lean/kick pendulum hinged and swayed)
-      case "hit":
-        this.hitstop = 0.07; this.bendV += 4.2; this.squashV -= 1.6;
+      case "hit": // bendV in radians/s of ankle tilt; springs follow the bend
+        this.hitstop = 0.07; this.bendV += 0.6; this.squashV -= 1.6;
         this.shakeT = 0; this.shakeAmp = 5; this.flash = 0.10;
-        this.eyeShut = 0.16; this.headLag = 0.05; this.excite(1.8); break;
+        this.eyeShut = 0.16; this.headLag = 0.05; this.excite(0.8); break;
       case "lunge":
         this.kickV -= 260; this.leanTo(-0.06, 0.35); break;
       case "stagger":
-        this.hitstop = 0.10; this.bendV += 7.0; this.squashV -= 2.6;
+        this.hitstop = 0.10; this.bendV += 1.0; this.squashV -= 2.6;
         this.shakeT = 0; this.shakeAmp = 9; this.flash = 0.14;
         this.eyeShut = 0.3; this.headLag = 0.06; this.sinkPulse = 14;
-        this.excite(3.2); break;
+        this.excite(1.5); break;
       case "collapse":
         this.sinkTarget = 26; this.leanTo(0.13, 0); break;
       case "recover":

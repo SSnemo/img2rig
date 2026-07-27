@@ -88,9 +88,9 @@ class Params:
     fade: float = 1.0
     arm_l: float = 0.0
     arm_r: float = 0.0
-    # height-graded horizontal bend (hit reactions): shears each layer by its
-    # height above the ground - feet planted, head max - so the body flexes
-    # like a reed instead of hinging around a single pivot
+    # ankle-anchored whole-rig tilt in radians (hit reactions): every layer
+    # rotates rigidly around a ground anchor at the canvas bottom - feet
+    # stationary, head max, zero relative layer displacement by construction
     bend: float = 0.0
 
 
@@ -116,8 +116,10 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
                 local = p.head_angle + p.breath * 0.012
         elif n.spring:
             if dt > 0:
+                # bend included in the drive: cloth lags the whole-body tilt
                 k, c = n.spring
-                n.spring_v += (-k * n.spring_a - c * n.spring_v - rot * k * 0.6) * dt
+                n.spring_v += (-k * n.spring_a - c * n.spring_v
+                               - (rot + p.bend) * k * 0.6) * dt
                 n.spring_a += n.spring_v * dt
             local = n.spring_a
         acc.append((rot + local, dx, dy))
@@ -145,13 +147,20 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
         wx, wy = cx + dx, cy + dy
         rot_out = chain_rot + local + arm
         if p.bend and rig.canvas[1] > 0:
-            # profile from the resting center: stable under sink/kick
-            rcy0 = n.y + n.h * 0.5
-            f = max(0.0, (rig.canvas[1] - rcy0) / rig.canvas[1]) ** 1.7
-            wx += p.bend * 90.0 * f
-            rot_out += p.bend * 0.10 * f
+            # rigid tilt about the ground anchor: identical transform for
+            # every layer, so nothing can separate
+            ax, gy = _bend_anchor(rig), rig.canvas[1]
+            wx, wy = _rot(ax, gy, wx, wy, p.bend)
+            rot_out += p.bend
         out.append((wx, wy, rot_out, p.fade))
     return out
+
+
+def _bend_anchor(rig: Rig) -> float:
+    for n in rig.nodes:
+        if not n.is_layer and n.name == "body_pivot":
+            return n.px
+    return rig.canvas[0] * 0.5
 
 
 class PlayerSim:
@@ -190,23 +199,23 @@ class PlayerSim:
         # (visible upper/lower separation) and swayed like a metronome.
         if motion == "hit":
             self.hitstop = 0.07
-            self.bend_v += 4.2
+            self.bend_v += 0.6  # radians/s of ankle tilt
             self.squash_v -= 1.6
             self.shake_t, self.shake_amp = 0.0, 5.0
             self.flash = 0.10
             self.eye_shut = 0.16
             self.head_lag = 0.05  # head snaps a beat after the body
-            self.excite(1.8)
+            self.excite(0.8)  # springs mostly follow the bend now
         elif motion == "stagger":
             self.hitstop = 0.10
-            self.bend_v += 7.0
+            self.bend_v += 1.0  # radians/s of ankle tilt
             self.squash_v -= 2.6
             self.shake_t, self.shake_amp = 0.0, 9.0
             self.flash = 0.14
             self.eye_shut = 0.3
             self.head_lag = 0.06
             self.sink_pulse = 14.0  # knee-buckle, self-decaying
-            self.excite(3.2)
+            self.excite(1.5)  # springs mostly follow the bend now
         elif motion == "enrage":
             self.rage_target = 1.0
             self.head_imp_v += 6.0

@@ -89,10 +89,13 @@ struct Params {
     float sink = 0;      // vertical sink (collapse / death), rig-canvas px
     float rage = 0;      // 0..1 alpha of the emissive "sigil" layer
     float fade = 1;      // overall brightness (death fade-out)
-    // Height-graded horizontal bend (the hit-reaction primitive). Unlike
-    // `lean` - a rigid rotation around body_pivot that reads as a hinge -
-    // bend shears each layer by its height above the ground (feet planted,
-    // head max), so the body flexes like a reed with no separation line.
+    // Ankle-anchored whole-rig tilt in radians (the hit-reaction primitive).
+    // Unlike `lean` - a rotation around body_pivot, below which layers move
+    // the *opposite* way (reads as a hinge) - bendX rotates every layer
+    // rigidly around a ground anchor at the bottom of the canvas: feet
+    // stationary, head max, and zero relative layer displacement by
+    // construction. Springs receive it as parent motion, so capes and hair
+    // lag it coherently instead of being kicked at random.
     float bendX = 0;
     // Shoulder-joint angles (radians). Name-driven: only layers called
     // arm_L / arm_R respond; rigs without arm layers degrade gracefully to
@@ -126,6 +129,10 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
     struct Acc { float rot, dx, dy, prevRot; };
     std::vector<Acc> acc(d.nodes.size());
     out.resize(d.nodes.size());
+    // ground anchor for the bend tilt: body_pivot's x at the canvas bottom
+    float anchorX = d.canvasW * 0.5f;
+    for (auto& n : d.nodes)
+        if (!n.isLayer && n.name == "body_pivot") { anchorX = n.px; break; }
     for (size_t i = 0; i < d.nodes.size(); i++) {
         Node& n = d.nodes[i];
         float rot = 0, dx = 0, dy = 0;
@@ -146,8 +153,10 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
         } else if (n.hasSpring) {
             if (dt > 0) {
                 // Parent angular-velocity approximation: drive against the
-                // accumulated parent angle so the spring lags then follows.
-                springStep(n.springA, n.springV, n.k, n.c, -rot * n.k * 0.6f, dt);
+                // accumulated parent angle (bend included, so cloth lags the
+                // whole-body tilt coherently) - the spring lags then follows.
+                springStep(n.springA, n.springV, n.k, n.c,
+                           -(rot + p.bendX) * n.k * 0.6f, dt);
             }
             localRot = n.springA;
         }
@@ -195,12 +204,13 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
         out[i].rot = chainRot + localRot + armRot;
         out[i].alpha = p.fade;
         if (p.bendX != 0.0f && d.canvasH > 0) {
-            // profile from the layer's *resting* center: stable under sink/kick
-            float rcy0 = n.y + n.h * 0.5f;
-            float f = rcy0 < d.canvasH ? (d.canvasH - rcy0) / d.canvasH : 0.0f;
-            f = std::pow(f, 1.7f);
-            out[i].cx += p.bendX * 90.0f * f;
-            out[i].rot += p.bendX * 0.10f * f;
+            // rigid tilt about the ground anchor: identical transform for
+            // every layer, so nothing can separate
+            float s = std::sin(p.bendX), co = std::cos(p.bendX);
+            float ox = out[i].cx - anchorX, oy = out[i].cy - d.canvasH;
+            out[i].cx = anchorX + ox * co - oy * s;
+            out[i].cy = d.canvasH + ox * s + oy * co;
+            out[i].rot += p.bendX;
         }
     }
 }

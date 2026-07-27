@@ -123,15 +123,22 @@ int main() {
     CHECK(drawn == 5);
     (void)zPrev;
 
-    // bendX shears by height: a head-high layer displaces more than a low one
+    // bendX is a rigid ankle tilt: every layer gets the SAME rotation (zero
+    // relative displacement), and higher layers displace more only because
+    // they sit farther from the ground anchor
     p = Params{};
-    p.bendX = 0.5f;
+    p.bendX = 0.1f;
     solve(d, p, 0, xf);
     {
-        float dxHead = xf[5].cx - (400.0f + 240.0f * 0.5f); // head layer
-        float dxBody = xf[3].cx - 500.0f;                   // body layer (lower)
-        CHECK(dxHead > dxBody && dxBody >= 0.0f);
-        CHECK(xf[5].rot > xf[3].rot); // graded tilt follows the same profile
+        float dxHead = std::fabs(xf[5].cx - (400.0f + 240.0f * 0.5f));
+        float dxBody = std::fabs(xf[3].cx - 500.0f);
+        CHECK(dxHead > dxBody && dxBody > 0.0f);
+        CHECK(std::fabs(xf[5].rot - xf[3].rot) < 1e-6); // uniform, no gradient
+        // exactness: the body-layer center rotated by hand about the anchor
+        float s = std::sin(0.1f), c = std::cos(0.1f);
+        float ox = 500.0f - 500.0f, oy = 850.0f - 1500.0f; // anchor (bp.px, canvasH)
+        CHECK(std::fabs(xf[3].cx - (500.0f + ox * c - oy * s)) < 1e-3);
+        CHECK(std::fabs(xf[3].cy - (1500.0f + ox * s + oy * c)) < 1e-3);
     }
     p = Params{};
 
@@ -142,9 +149,9 @@ int main() {
     CHECK(player.params().breath == breathBefore); // frozen
     for (int i = 0; i < 30; i++) player.update(1.0f / 60.0f);
     CHECK(player.params().breath != breathBefore); // resumed
-    CHECK(std::fabs(player.params().bendX) > 1e-4); // bend impulse landed
-    for (int i = 0; i < 90; i++) player.update(1.0f / 60.0f);
-    CHECK(std::fabs(player.params().bendX) < 0.02f); // settled, no pendulum
+    CHECK(std::fabs(player.params().bendX) > 1e-3); // bend impulse landed
+    for (int i = 0; i < 120; i++) player.update(1.0f / 60.0f);
+    CHECK(std::fabs(player.params().bendX) < 3e-4); // settled, no pendulum
 
     // motion triggers change state without exploding
     player.trigger(Motion::Stagger);

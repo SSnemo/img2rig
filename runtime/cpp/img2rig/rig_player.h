@@ -85,14 +85,14 @@ public:
             // relative displacement), and the freeze sells the weight.
             case M::Hit:
                 hitstop_ = 0.07f;
-                bendV_ += 4.2f;
+                bendV_ += 0.6f; // radians/s of ankle tilt
                 squashV_ -= 1.6f;
                 shakeT_ = 0;
                 shakeAmp_ = 5.0f;
                 flash_ = 0.10f;
                 eyeShut_ = 0.16f;
                 headLag_ = 0.05f; // head snaps a beat after the body (cascade)
-                exciteSprings(1.8f);
+                exciteSprings(0.8f); // springs mostly follow the bend now
                 break;
             case M::Lunge:
                 kickV_ -= 260;
@@ -100,7 +100,7 @@ public:
                 break;
             case M::Stagger:
                 hitstop_ = 0.10f;
-                bendV_ += 7.0f;
+                bendV_ += 1.0f; // radians/s of ankle tilt
                 squashV_ -= 2.6f;
                 shakeT_ = 0;
                 shakeAmp_ = 9.0f;
@@ -108,7 +108,7 @@ public:
                 eyeShut_ = 0.3f;
                 headLag_ = 0.06f;
                 sinkPulse_ = 14.0f; // brief knee-buckle, decays on its own
-                exciteSprings(3.2f);
+                exciteSprings(1.5f); // springs mostly follow the bend now
                 break;
             case M::Collapse:
                 sinkTarget_ = 26;
