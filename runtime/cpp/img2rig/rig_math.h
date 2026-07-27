@@ -154,17 +154,20 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
             }
         } else if (n.hasSpring) {
             if (dt > 0) {
-                // Inertial lag driven by the parent's angular VELOCITY (bend
-                // included). Driving by the parent's angle - the obvious
-                // first attempt - biases the spring's equilibrium *against*
-                // any held rotation, so cloth visibly rotates the wrong way
-                // whenever the body holds a tilt. Velocity drive is zero at
-                // steady state: cloth lags while the parent moves, then
-                // always realigns exactly.
-                float rotP = rot + p.bendX;
-                float angVel = (rotP - n.prevParent) / dt;
+                // Inertial lag driven by the parent chain's angular VELOCITY.
+                // Two hard-won rules live here:
+                // 1. Velocity, not angle: an angle-proportional drive biases
+                //    the equilibrium against any held rotation, so cloth
+                //    settles visibly rotated the wrong way.
+                // 2. bendX is deliberately EXCLUDED. A spring's lag is an
+                //    opposite rotation around its own attachment pivot -
+                //    during a hit tilt that reads as the skirt/cape counter-
+                //    rotating against the body (a second rotation center).
+                //    Hit reactions stay single-center rigid; springs answer
+                //    only to articulation (head sway, lean poses).
+                float angVel = (rot - n.prevParent) / dt;
                 angVel = std::min(6.0f, std::max(-6.0f, angVel));
-                n.prevParent = rotP;
+                n.prevParent = rot;
                 springStep(n.springA, n.springV, n.k, n.c,
                            -angVel * n.k * 0.7f, dt);
             }

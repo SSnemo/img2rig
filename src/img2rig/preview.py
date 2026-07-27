@@ -117,15 +117,15 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
                 local = p.head_angle + p.breath * 0.012
         elif n.spring:
             if dt > 0:
-                # Inertial lag driven by the parent's angular VELOCITY (bend
-                # included): zero at steady state, so cloth lags while the
-                # parent moves and then always realigns exactly. An
-                # angle-proportional drive would bias the equilibrium against
-                # any held tilt - cloth visibly rotating the wrong way.
+                # Inertial lag driven by the parent chain's angular VELOCITY.
+                # Velocity, not angle (angle drive biases cloth against held
+                # rotations), and bend deliberately EXCLUDED: a spring lag is
+                # an opposite rotation around its own pivot - a second
+                # rotation center that reads as cloth counter-rotating during
+                # hits. Hit tilts stay single-center rigid.
                 k, c = n.spring
-                rot_p = rot + p.bend
-                ang_vel = max(-6.0, min(6.0, (rot_p - n.prev_parent) / dt))
-                n.prev_parent = rot_p
+                ang_vel = max(-6.0, min(6.0, (rot - n.prev_parent) / dt))
+                n.prev_parent = rot
                 n.spring_v += (-k * n.spring_a - c * n.spring_v
                                - ang_vel * k * 0.7) * dt
                 n.spring_a += n.spring_v * dt
@@ -240,7 +240,7 @@ class PlayerSim:
         if self.head_lag > 0:  # delayed head snap (overlap/follow-through)
             self.head_lag -= dt
             if self.head_lag <= 0:
-                self.head_imp_v += 5.5
+                self.head_imp_v += 4.0
         # critically damped: one overshoot max, never a pendulum. These
         # springs are stiff (c*dt must stay < 2), so integrate in substeps -
         # a 15 fps preview would otherwise diverge.

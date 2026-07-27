@@ -68,15 +68,15 @@ function solve(rig, p, dt) {
       }
     } else if (n.spring) {
       if (dt > 0) {
-        // Inertial lag driven by the parent's angular VELOCITY (bend
-        // included): zero at steady state, so cloth lags while the parent
-        // moves and then always realigns exactly. An angle-proportional
-        // drive biases the equilibrium against any held tilt - cloth
-        // visibly rotating the wrong way.
+        // Inertial lag driven by the parent chain's angular VELOCITY.
+        // Velocity, not angle (angle drive biases cloth against held
+        // rotations), and bend deliberately EXCLUDED: a spring lag is an
+        // opposite rotation around its own pivot - a second rotation center
+        // that reads as cloth counter-rotating during hits. Hit tilts stay
+        // single-center rigid.
         const [k, c] = n.spring;
-        const rotP = rot + (p.bend || 0);
-        const angVel = Math.max(-6, Math.min(6, (rotP - n.prevParent) / dt));
-        n.prevParent = rotP;
+        const angVel = Math.max(-6, Math.min(6, (rot - n.prevParent) / dt));
+        n.prevParent = rot;
         n.springV += (-k * n.springA - c * n.springV - angVel * k * 0.7) * dt;
         n.springA += n.springV * dt;
       }
@@ -207,7 +207,7 @@ export class RigPlayer {
     this.t += dt;
     if (this.headLag > 0) { // delayed head snap (overlap/follow-through)
       this.headLag -= dt;
-      if (this.headLag <= 0) this.headImpV += 5.5;
+      if (this.headLag <= 0) this.headImpV += 4.0;
     }
     // critically damped: one overshoot max, never a pendulum. Stiff springs
     // (c*dt must stay < 2): substep so low frame rates don't diverge.

@@ -235,7 +235,7 @@ public:
         t_ += dt;
         if (headLag_ > 0) { // delayed head snap (overlap/follow-through)
             headLag_ -= dt;
-            if (headLag_ <= 0) headImpV_ += 5.5f;
+            if (headLag_ <= 0) headImpV_ += 4.0f;
         }
         // critically damped: one overshoot max, never a pendulum. Stiff
         // springs (c*dt must stay < 2): integrate in substeps so low frame

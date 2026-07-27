@@ -107,6 +107,21 @@ int main() {
     for (int i = 0; i < 600; i++) solve(d, p, 1.0f / 60.0f, xf);
     CHECK(std::fabs(xf[2].rot - 0.3f) < 0.01f);   // ...then realigns fully
 
+    // hit tilts are single-center rigid: bendX must never excite a spring
+    // (a spring lag is an opposite rotation around its own pivot - a second
+    // rotation center that reads as the cloth counter-rotating)
+    {
+        Doc d2 = parse(kRig);
+        std::vector<WorldXf> xf2;
+        Params p2;
+        for (int i = 0; i < 60; i++) {
+            p2.bendX = 0.05f * std::sin(i * 0.3f); // vigorous bend wiggle
+            solve(d2, p2, 1.0f / 60.0f, xf2);
+        }
+        CHECK(std::fabs(d2.nodes[2].springA) < 1e-6); // cape spring untouched
+        CHECK(std::fabs(xf2[2].rot - p2.bendX) < 1e-4); // cape = pure bend
+    }
+
     // ---- player: load from disk, update, draw through the callback ----
     const char* tmp = "rig_test_tmp.txt";
     {
