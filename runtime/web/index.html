@@ -23,6 +23,19 @@
 <canvas id="cv" width="480" height="640"></canvas>
 <div class="row" id="buttons"></div>
 <div id="err"></div>
+<script>
+// file:// double-click lands here with modules and fetch blocked - explain
+// instead of showing a blank page
+if (location.protocol === "file:") {
+  addEventListener("DOMContentLoaded", () => {
+    document.getElementById("err").innerHTML =
+      "Browsers block ES modules and image fetches on <code>file://</code> " +
+      "pages, so this demo needs any static HTTP server.<br>" +
+      "From the repository root run <code>python -m http.server 8123</code> " +
+      "then open <code>http://localhost:8123/runtime/web/</code>";
+  });
+}
+</script>
 <script type="module">
 import { RigPlayer } from "./rig-player.js";
 
