@@ -123,6 +123,29 @@ int main() {
     CHECK(drawn == 5);
     (void)zPrev;
 
+    // bendX shears by height: a head-high layer displaces more than a low one
+    p = Params{};
+    p.bendX = 0.5f;
+    solve(d, p, 0, xf);
+    {
+        float dxHead = xf[5].cx - (400.0f + 240.0f * 0.5f); // head layer
+        float dxBody = xf[3].cx - 500.0f;                   // body layer (lower)
+        CHECK(dxHead > dxBody && dxBody >= 0.0f);
+        CHECK(xf[5].rot > xf[3].rot); // graded tilt follows the same profile
+    }
+    p = Params{};
+
+    // hitstop freezes time: params don't advance while the timer runs
+    player.trigger(Motion::Hit); // hitstop 0.07s
+    float breathBefore = player.params().breath;
+    player.update(0.03f);
+    CHECK(player.params().breath == breathBefore); // frozen
+    for (int i = 0; i < 30; i++) player.update(1.0f / 60.0f);
+    CHECK(player.params().breath != breathBefore); // resumed
+    CHECK(std::fabs(player.params().bendX) > 1e-4); // bend impulse landed
+    for (int i = 0; i < 90; i++) player.update(1.0f / 60.0f);
+    CHECK(std::fabs(player.params().bendX) < 0.02f); // settled, no pendulum
+
     // motion triggers change state without exploding
     player.trigger(Motion::Stagger);
     for (int i = 0; i < 120; i++) player.update(1.0f / 60.0f);

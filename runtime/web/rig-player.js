@@ -90,7 +90,16 @@ function solve(rig, p, dt) {
       if (pr) [cx, cy] = rotAround(pn.px, pn.py, cx, cy, pr);
       chainRot += pr;
     }
-    out.push([cx + dx, cy + dy, chainRot + local + arm, p.fade]);
+    let wx = cx + dx, rotOut = chainRot + local + arm;
+    if (p.bend && rig.canvas[1] > 0) {
+      // height-graded bend: shear from the resting center, feet planted -
+      // the body flexes like a reed instead of hinging around one pivot
+      const rcy0 = n.y + n.h * 0.5;
+      const f = Math.pow(Math.max(0, (rig.canvas[1] - rcy0) / rig.canvas[1]), 1.7);
+      wx += p.bend * 90.0 * f;
+      rotOut += p.bend * 0.10 * f;
+    }
+    out.push([wx, cy + dy, rotOut, p.fade]);
   }
   return out;
 }
@@ -130,6 +139,11 @@ export class RigPlayer {
     this.fade = 1; this.fadeTarget = 1;
     this.armL = 0; this.armLT = 0; this.armR = 0; this.armRT = 0;
     this.armRate = 5;
+    // hit-reaction machine (hitstop / bend / squash / shake / flash)
+    this.hitstop = 0; this.bend = 0; this.bendV = 0;
+    this.squash = 1; this.squashV = 0;
+    this.shakeT = 9e9; this.shakeAmp = 0;
+    this.flash = 0; this.headLag = 0; this.sinkPulse = 0;
     for (const n of this.rig.nodes) if (n.spring) { n.springA = 0; n.springV = 0; }
     this.params = null;
     this.xf = null;
@@ -143,14 +157,19 @@ export class RigPlayer {
   /** hit | lunge | stagger | collapse | recover | enrage | calm | heal | windup | die */
   trigger(motion) {
     switch (motion) {
+      // hit reactions: hitstop + squash + graded bend + lockstep shake +
+      // flash (the old lean/kick pendulum hinged and swayed)
       case "hit":
-        this.kickV += 340; this.headImpV += 5; this.eyeShut = 0.18;
-        this.excite(2.2); break;
+        this.hitstop = 0.07; this.bendV += 4.2; this.squashV -= 1.6;
+        this.shakeT = 0; this.shakeAmp = 5; this.flash = 0.10;
+        this.eyeShut = 0.16; this.headLag = 0.05; this.excite(1.8); break;
       case "lunge":
         this.kickV -= 260; this.leanTo(-0.06, 0.35); break;
       case "stagger":
-        this.leanTo(0.24, 1.0); this.kickV += 260; this.headImpV += 6;
-        this.eyeShut = 0.3; this.excite(3.5); break;
+        this.hitstop = 0.10; this.bendV += 7.0; this.squashV -= 2.6;
+        this.shakeT = 0; this.shakeAmp = 9; this.flash = 0.14;
+        this.eyeShut = 0.3; this.headLag = 0.06; this.sinkPulse = 14;
+        this.excite(3.2); break;
       case "collapse":
         this.sinkTarget = 26; this.leanTo(0.13, 0); break;
       case "recover":
@@ -172,7 +191,30 @@ export class RigPlayer {
   update(dt) {
     if (dt <= 0) return;
     dt = Math.min(dt, 0.05); // tab-switch guard: clamp runaway frame gaps
+    if (this.hitstop > 0) { // impact freeze: time stops for a beat
+      this.hitstop -= dt;
+      this.flash = Math.max(0, this.flash - dt * 0.6);
+      return;
+    }
     this.t += dt;
+    if (this.headLag > 0) { // delayed head snap (overlap/follow-through)
+      this.headLag -= dt;
+      if (this.headLag <= 0) this.headImpV += 5.5;
+    }
+    // critically damped: one overshoot max, never a pendulum. Stiff springs
+    // (c*dt must stay < 2): substep so low frame rates don't diverge.
+    const nSub = Math.max(1, Math.floor(dt * 120) + 1), hSub = dt / nSub;
+    for (let s = 0; s < nSub; s++) {
+      this.bendV += (-140 * this.bend - 23.6 * this.bendV) * hSub;
+      this.bend += this.bendV * hSub;
+      const sq = this.squash - 1;
+      this.squashV += (-260 * sq - 32 * this.squashV) * hSub;
+      this.squash += this.squashV * hSub;
+    }
+    this.squash = Math.min(1.3, Math.max(0.7, this.squash));
+    this.shakeT += dt;
+    this.sinkPulse *= Math.max(0, 1 - dt * 3);
+    this.flash = Math.max(0, this.flash - dt);
     this.blinkIn -= dt;
     if (this.eyeShut > 0) {
       this.eyeShut -= dt;
@@ -205,11 +247,19 @@ export class RigPlayer {
       breath: 0.5 + 0.5 * Math.sin(this.t * 6.2832 / 3.8),
       headAngle: 0.02 * Math.sin(this.t * 6.2832 / 7.3) + this.headImp * 0.05,
       eyeOpen: this.eyeOpen, lean: this.lean, kickX: this.kick,
-      sink: this.sink, rage: this.rage, fade: this.fade,
-      armL: this.armL, armR: this.armR,
+      sink: this.sink + this.sinkPulse, rage: this.rage, fade: this.fade,
+      armL: this.armL, armR: this.armR, bend: this.bend,
     };
     this.xf = solve(this.rig, this.params, dt);
   }
+
+  // whole-rig impact effects, applied uniformly at draw time
+  shakeOffset() {
+    return this.shakeAmp * Math.exp(-this.shakeT * 7) *
+      (0.7 * Math.sin(this.shakeT * 6.2832 * 28) +
+       0.3 * Math.sin(this.shakeT * 6.2832 * 9));
+  }
+  flashAmount() { return Math.min(1, this.flash * 7); }
 
   /** Draw at (x, y) = character center, scaled to `height` display pixels. */
   draw(ctx, x, y, height) {
@@ -217,6 +267,18 @@ export class RigPlayer {
     const [cw, ch] = this.rig.canvas;
     const sc = height / ch;
     const p = this.params;
+    // whole-rig squash (about the feet) + shake: one uniform ctx transform,
+    // so no layer can displace relative to another
+    ctx.save();
+    const sqY = this.squash, sqX = 1 + (1 - this.squash) * 0.7;
+    if (Math.abs(sqY - 1) > 1e-3) {
+      const bottom = y + height / 2;
+      ctx.translate(x, bottom);
+      ctx.scale(sqX, sqY);
+      ctx.translate(-x, -bottom);
+    }
+    ctx.translate(this.shakeOffset() * sc, 0);
+    const flash = this.flashAmount();
     for (const i of this.order) {
       const n = this.rig.nodes[i];
       const [wx, wy, rot, alphaBase] = this.xf[i];
@@ -235,11 +297,13 @@ export class RigPlayer {
       }
       ctx.save();
       ctx.globalAlpha = alpha;
-      if (p.fade < 0.999) ctx.filter = `brightness(${p.fade})`;
+      const bright = p.fade * (1 + 0.9 * flash); // impact flash: brightness lift
+      if (Math.abs(bright - 1) > 1e-3) ctx.filter = `brightness(${bright})`;
       ctx.translate(x + (wx - cw * 0.5) * sc, y + (wy - ch * 0.5) * sc + eyeDrop);
       if (rot) ctx.rotate(rot);
       ctx.drawImage(img, -w / 2, -h / 2, w, h);
       ctx.restore();
     }
+    ctx.restore();
   }
 }

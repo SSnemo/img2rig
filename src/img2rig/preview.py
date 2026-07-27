@@ -88,6 +88,10 @@ class Params:
     fade: float = 1.0
     arm_l: float = 0.0
     arm_r: float = 0.0
+    # height-graded horizontal bend (hit reactions): shears each layer by its
+    # height above the ground - feet planted, head max - so the body flexes
+    # like a reed instead of hinging around a single pivot
+    bend: float = 0.0
 
 
 def _rot(px: float, py: float, cx: float, cy: float, a: float) -> tuple[float, float]:
@@ -138,7 +142,15 @@ def solve(rig: Rig, p: Params, dt: float) -> list[tuple[float, float, float, flo
             if pr:
                 cx, cy = _rot(pn.px, pn.py, cx, cy, pr)
             chain_rot += pr
-        out.append((cx + dx, cy + dy, chain_rot + local + arm, p.fade))
+        wx, wy = cx + dx, cy + dy
+        rot_out = chain_rot + local + arm
+        if p.bend and rig.canvas[1] > 0:
+            # profile from the resting center: stable under sink/kick
+            rcy0 = n.y + n.h * 0.5
+            f = max(0.0, (rig.canvas[1] - rcy0) / rig.canvas[1]) ** 1.7
+            wx += p.bend * 90.0 * f
+            rot_out += p.bend * 0.10 * f
+        out.append((wx, wy, rot_out, p.fade))
     return out
 
 
@@ -158,6 +170,14 @@ class PlayerSim:
         self.head_imp = self.head_imp_v = 0.0
         self.sink = self.sink_target = 0.0
         self.rage = self.rage_target = 0.0
+        # hit-reaction machine (hitstop / bend / squash / shake / flash)
+        self.hitstop = 0.0
+        self.bend = self.bend_v = 0.0
+        self.squash, self.squash_v = 1.0, 0.0
+        self.shake_t, self.shake_amp = 9e9, 0.0
+        self.flash = 0.0
+        self.head_lag = 0.0
+        self.sink_pulse = 0.0
 
     def excite(self, v: float) -> None:
         for n in self.rig.nodes:
@@ -165,17 +185,28 @@ class PlayerSim:
                 n.spring_v += v * (1 if self.rng.random() > 0.5 else -1)
 
     def trigger(self, motion: str) -> None:
+        # Hit reactions: hitstop + squash + graded bend + lockstep shake +
+        # flash. The old lean/kick pendulum hinged the body around one pivot
+        # (visible upper/lower separation) and swayed like a metronome.
         if motion == "hit":
-            self.kick_v += 340
-            self.head_imp_v += 5.0
-            self.eye_shut = 0.18
-            self.excite(2.2)
+            self.hitstop = 0.07
+            self.bend_v += 4.2
+            self.squash_v -= 1.6
+            self.shake_t, self.shake_amp = 0.0, 5.0
+            self.flash = 0.10
+            self.eye_shut = 0.16
+            self.head_lag = 0.05  # head snaps a beat after the body
+            self.excite(1.8)
         elif motion == "stagger":
-            self.lean_target, self.lean_return = 0.24, 1.0
-            self.kick_v += 260
-            self.head_imp_v += 6.0
+            self.hitstop = 0.10
+            self.bend_v += 7.0
+            self.squash_v -= 2.6
+            self.shake_t, self.shake_amp = 0.0, 9.0
+            self.flash = 0.14
             self.eye_shut = 0.3
-            self.excite(3.5)
+            self.head_lag = 0.06
+            self.sink_pulse = 14.0  # knee-buckle, self-decaying
+            self.excite(3.2)
         elif motion == "enrage":
             self.rage_target = 1.0
             self.head_imp_v += 6.0
@@ -184,7 +215,30 @@ class PlayerSim:
             self.rage_target = 0.0
 
     def step(self, dt: float) -> Params:
+        if self.hitstop > 0:  # impact freeze: time stops for a beat
+            self.hitstop -= dt
+            self.flash = max(0.0, self.flash - dt * 0.6)
+            return self._params()
         self.t += dt
+        if self.head_lag > 0:  # delayed head snap (overlap/follow-through)
+            self.head_lag -= dt
+            if self.head_lag <= 0:
+                self.head_imp_v += 5.5
+        # critically damped: one overshoot max, never a pendulum. These
+        # springs are stiff (c*dt must stay < 2), so integrate in substeps -
+        # a 15 fps preview would otherwise diverge.
+        n = max(1, int(dt * 120) + 1)
+        h = dt / n
+        for _ in range(n):
+            self.bend_v += (-140.0 * self.bend - 23.6 * self.bend_v) * h
+            self.bend += self.bend_v * h
+            sq = self.squash - 1.0
+            self.squash_v += (-260.0 * sq - 32.0 * self.squash_v) * h
+            self.squash += self.squash_v * h
+        self.squash = min(1.3, max(0.7, self.squash))
+        self.shake_t += dt
+        self.sink_pulse *= max(0.0, 1.0 - dt * 3.0)
+        self.flash = max(0.0, self.flash - dt)
         self.blink_in -= dt
         if self.eye_shut > 0:
             self.eye_shut -= dt
@@ -207,15 +261,34 @@ class PlayerSim:
         self.head_imp += self.head_imp_v * dt
         self.sink += (self.sink_target - self.sink) * min(1.0, dt * 4.0)
         self.rage += (self.rage_target - self.rage) * min(1.0, dt * 3.0)
+        return self._params()
+
+    def _params(self) -> Params:
         return Params(
             breath=0.5 + 0.5 * math.sin(self.t * 6.2832 / 3.8),
             head_angle=0.02 * math.sin(self.t * 6.2832 / 7.3) + self.head_imp * 0.05,
             eye_open=self.eye_open,
             lean=self.lean,
             kick_x=self.kick,
-            sink=self.sink,
+            sink=self.sink + self.sink_pulse,
             rage=self.rage,
+            bend=self.bend,
         )
+
+    # whole-rig impact effects, applied uniformly at draw time
+    def shake_offset(self) -> float:
+        return self.shake_amp * math.exp(-self.shake_t * 7.0) * (
+            0.7 * math.sin(self.shake_t * 6.2832 * 28)
+            + 0.3 * math.sin(self.shake_t * 6.2832 * 9))
+
+    def squash_y(self) -> float:
+        return self.squash
+
+    def squash_x(self) -> float:
+        return 1.0 + (1.0 - self.squash) * 0.7
+
+    def flash_amount(self) -> float:
+        return min(1.0, self.flash * 7.0)
 
 
 # scripted timelines: (time, motion) events over a total duration
@@ -258,6 +331,7 @@ def render_gif(rig_path: str, out_path: str, script: str = "idle",
         p = sim.step(dt)
         xf = solve(rig, p, dt)
         frame = Image.new("RGBA", (width, height), (*background, 255))
+        chr_canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         for i in order:
             n = rig.nodes[i]
             cx, cy, rot, alpha = xf[i]
@@ -280,8 +354,25 @@ def render_gif(rig_path: str, out_path: str, script: str = "idle",
             if alpha < 0.999:
                 im = im.copy()
                 im.putalpha(im.getchannel("A").point(lambda a: int(a * alpha)))
-            frame.alpha_composite(
+            chr_canvas.alpha_composite(
                 im, (int(cx * sc - w / 2), int(cy * sc - h / 2 + eye_drop)))
+        # whole-rig impact effects: uniform transforms can't tear layers apart
+        sq = sim.squash_y()
+        if abs(sq - 1.0) > 1e-3:  # squash about the feet
+            nw, nh = int(width * sim.squash_x()), int(height * sq)
+            chr_canvas = chr_canvas.resize((nw, nh), Image.BILINEAR)
+            pad = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            pad.alpha_composite(chr_canvas, ((width - nw) // 2, height - nh))
+            chr_canvas = pad
+        fl = sim.flash_amount()
+        if fl > 0.01:  # impact flash: blend toward white, alpha preserved
+            import numpy as _np
+            arr = _np.array(chr_canvas)
+            rgb = arr[..., :3].astype(_np.float32)
+            arr[..., :3] = (rgb + (255 - rgb) * (0.32 * fl)).astype(_np.uint8)
+            chr_canvas = Image.fromarray(arr)
+        # paste (not alpha_composite): the shake offset can be negative
+        frame.paste(chr_canvas, (int(sim.shake_offset() * sc), 0), chr_canvas)
         frames.append(frame.convert("P", palette=Image.ADAPTIVE)
                       if out_path.endswith(".gif") else frame)
 

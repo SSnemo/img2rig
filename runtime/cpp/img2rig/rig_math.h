@@ -89,6 +89,11 @@ struct Params {
     float sink = 0;      // vertical sink (collapse / death), rig-canvas px
     float rage = 0;      // 0..1 alpha of the emissive "sigil" layer
     float fade = 1;      // overall brightness (death fade-out)
+    // Height-graded horizontal bend (the hit-reaction primitive). Unlike
+    // `lean` - a rigid rotation around body_pivot that reads as a hinge -
+    // bend shears each layer by its height above the ground (feet planted,
+    // head max), so the body flexes like a reed with no separation line.
+    float bendX = 0;
     // Shoulder-joint angles (radians). Name-driven: only layers called
     // arm_L / arm_R respond; rigs without arm layers degrade gracefully to
     // torso-only expression.
@@ -189,6 +194,14 @@ inline void solve(Doc& d, const Params& p, float dt, std::vector<WorldXf>& out) 
         out[i].cy = rcy + dy;
         out[i].rot = chainRot + localRot + armRot;
         out[i].alpha = p.fade;
+        if (p.bendX != 0.0f && d.canvasH > 0) {
+            // profile from the layer's *resting* center: stable under sink/kick
+            float rcy0 = n.y + n.h * 0.5f;
+            float f = rcy0 < d.canvasH ? (d.canvasH - rcy0) / d.canvasH : 0.0f;
+            f = std::pow(f, 1.7f);
+            out[i].cx += p.bendX * 90.0f * f;
+            out[i].rot += p.bendX * 0.10f * f;
+        }
     }
 }
 

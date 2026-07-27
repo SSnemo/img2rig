@@ -76,22 +76,39 @@ public:
     void trigger(Motion m) {
         using M = Motion;
         switch (m) {
+            // Hit reactions use hitstop + squash + height-graded bend +
+            // whole-rig decaying shake + flash instead of the old rigid
+            // lean/kick pendulum: a single-pivot rotation reads as a hinge
+            // (upper and lower body visibly separate) and an underdamped
+            // kick sways like a metronome. Bend flexes the silhouette
+            // continuously, the shake moves every layer in lockstep (no
+            // relative displacement), and the freeze sells the weight.
             case M::Hit:
-                kickV_ += 340;
-                headImpV_ += 5.0f;
-                eyeShut_ = 0.18f;
-                exciteSprings(2.2f);
+                hitstop_ = 0.07f;
+                bendV_ += 4.2f;
+                squashV_ -= 1.6f;
+                shakeT_ = 0;
+                shakeAmp_ = 5.0f;
+                flash_ = 0.10f;
+                eyeShut_ = 0.16f;
+                headLag_ = 0.05f; // head snaps a beat after the body (cascade)
+                exciteSprings(1.8f);
                 break;
             case M::Lunge:
                 kickV_ -= 260;
                 leanTo(-0.06f, 0.35f);
                 break;
             case M::Stagger:
-                leanTo(0.24f, 1.0f);
-                kickV_ += 260;
-                headImpV_ += 6.0f;
+                hitstop_ = 0.10f;
+                bendV_ += 7.0f;
+                squashV_ -= 2.6f;
+                shakeT_ = 0;
+                shakeAmp_ = 9.0f;
+                flash_ = 0.14f;
                 eyeShut_ = 0.3f;
-                exciteSprings(3.5f);
+                headLag_ = 0.06f;
+                sinkPulse_ = 14.0f; // brief knee-buckle, decays on its own
+                exciteSprings(3.2f);
                 break;
             case M::Collapse:
                 sinkTarget_ = 26;
@@ -210,7 +227,34 @@ public:
 
     void update(float dt) {
         if (!loaded() || dt <= 0) return;
+        if (hitstop_ > 0) { // impact freeze: time itself stops for a beat
+            hitstop_ -= dt;
+            flash_ = std::max(0.0f, flash_ - dt * 0.6f);
+            return;
+        }
         t_ += dt;
+        if (headLag_ > 0) { // delayed head snap (overlap/follow-through)
+            headLag_ -= dt;
+            if (headLag_ <= 0) headImpV_ += 5.5f;
+        }
+        // critically damped: one overshoot max, never a pendulum. Stiff
+        // springs (c*dt must stay < 2): integrate in substeps so low frame
+        // rates don't diverge.
+        {
+            int n = std::max(1, (int)(dt * 120.0f) + 1);
+            float h = dt / n;
+            for (int s = 0; s < n; s++) {
+                bendV_ += (-140.0f * bend_ - 23.6f * bendV_) * h;
+                bend_ += bendV_ * h;
+                float sq = squash_ - 1.0f;
+                squashV_ += (-260.0f * sq - 32.0f * squashV_) * h;
+                squash_ += squashV_ * h;
+            }
+            squash_ = std::min(1.3f, std::max(0.7f, squash_));
+        }
+        shakeT_ += dt;
+        sinkPulse_ *= std::max(0.0f, 1.0f - dt * 3.0f);
+        flash_ = std::max(0.0f, flash_ - dt);
         if (pose_ == Pose::Windup) {
             poseT_ += dt;
             trembleT_ -= dt; // sustained tremble (denser and stronger when furious)
@@ -259,14 +303,30 @@ public:
         p.eyeOpen = eyeOpen_;
         p.lean = lean_;
         p.kickX = kick_;
-        p.sink = sink_ + slam_;
+        p.sink = sink_ + slam_ + sinkPulse_;
         p.rage = rage_;
         p.fade = fade_;
         p.armL = armL_;
         p.armR = armR_;
+        p.bendX = bend_;
         params_ = p;
         solve(doc_, p, dt, xf_);
     }
+
+    // Whole-rig impact effects, applied uniformly at draw time (uniform =
+    // zero relative layer displacement, so nothing can tear):
+    // shake: decaying dual-frequency offset in canvas px.
+    float shakeOffset() const {
+        return shakeAmp_ * std::exp(-shakeT_ * 7.0f) *
+               (0.7f * std::sin(shakeT_ * 6.2832f * 28.0f) +
+                0.3f * std::sin(shakeT_ * 6.2832f * 9.0f));
+    }
+    // squash: vertical scale about the character's feet (pair with a slight
+    // horizontal widen). 1 = none.
+    float squashY() const { return squash_; }
+    float squashX() const { return 1.0f + (1.0f - squash_) * 0.7f; }
+    // flash: 0..1 brighten-toward-white amount for the impact frames.
+    float flashAmount() const { return std::min(1.0f, flash_ * 7.0f); }
 
     // ---- full-frame pose keyframes ----
     // A rotate-the-cutouts rig is capped by what the source illustration
@@ -309,6 +369,10 @@ public:
         if (!loaded() || xf_.empty()) return;
         if (drawStrikeKeyframe(drawFn, center, height)) return;
         float sc = height / doc_.canvasH;
+        float shakeX = shakeOffset() * sc;
+        float sqY = squashY(), sqX = squashX();
+        float bottomY = center.y + height * 0.5f;
+        float lift = 1.0f + 0.9f * flashAmount(); // impact flash: brightness lift
         for (int i : order_) {
             auto& n = doc_.nodes[i];
             auto& w = xf_[i];
@@ -330,7 +394,14 @@ public:
             }
             Vec2 at{center.x + (w.cx - doc_.canvasW * 0.5f) * sc,
                     center.y + (w.cy - doc_.canvasH * 0.5f) * sc + eyeDrop};
-            float b = fade_;
+            if (sqY != 1.0f) { // squash about the feet, uniform across layers
+                at.y = bottomY - (bottomY - at.y) * sqY;
+                at.x = center.x + (at.x - center.x) * sqX;
+                size.x *= sqX;
+                size.y *= sqY;
+            }
+            at.x += shakeX;
+            float b = fade_ * lift;
             drawFn(relDir_ + n.file, at, size, {b, b, b, al}, w.rot);
         }
     }
@@ -360,6 +431,8 @@ private:
         pose_ = Pose::None; poseT_ = trembleT_ = 0;
         armL_ = armLT_ = armR_ = armRT_ = 0; armRate_ = 5.0f;
         charge_ = chargeT_ = 0; chargeRate_ = 4.0f; slam_ = 0;
+        hitstop_ = 0; bend_ = bendV_ = 0; squash_ = 1; squashV_ = 0;
+        shakeT_ = 9e9f; shakeAmp_ = 0; flash_ = 0; headLag_ = 0; sinkPulse_ = 0;
     }
     void leanTo(float target, float returnAfter) {
         leanTarget_ = target;
@@ -392,6 +465,12 @@ private:
     float armL_ = 0, armLT_ = 0, armR_ = 0, armRT_ = 0, armRate_ = 5.0f;
     float charge_ = 0, chargeT_ = 0, chargeRate_ = 4.0f;
     float slam_ = 0; // slam spike stacked on sink, decays fast
+    // hit-reaction machine (hitstop / bend / squash / shake / flash)
+    float hitstop_ = 0;
+    float bend_ = 0, bendV_ = 0;
+    float squash_ = 1, squashV_ = 0;
+    float shakeT_ = 9e9f, shakeAmp_ = 0;
+    float flash_ = 0, headLag_ = 0, sinkPulse_ = 0;
     unsigned rnd_ = 12345;
 };
 
